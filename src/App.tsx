@@ -1,13 +1,11 @@
-import { useState } from "react";
 import { Navbar } from "./components/Navbar";
 import { ThemeProvider } from "./components/theme-provider";
+import "./index.css";
 
 function App() {
   return (
     <ThemeProvider defaultTheme="dark" storageKey="vite-ui-theme">
-      <>
-        <Navbar />
-      </>
+      <Navbar />
     </ThemeProvider>
   );
 }
