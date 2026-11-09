@@ -1,13 +1,7 @@
-import { Navbar } from "./components/Navbar";
-import { ThemeProvider } from "./components/theme-provider";
 import "./index.css";
 
 function App() {
-  return (
-    <ThemeProvider defaultTheme="dark" storageKey="vite-ui-theme">
-      <Navbar />
-    </ThemeProvider>
-  );
+  return <div>HELLO WORLD!</div>;
 }
 
 export default App;
