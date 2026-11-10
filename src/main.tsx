@@ -6,6 +6,7 @@ import App from "./App.tsx";
 import Layout from "./layout.tsx";
 import "./index.css";
 import LoginPage from "./pages/LoginPage.tsx"; // changed: was LoginForm (bare form, no max-width)
+import PhotoPage from "./pages/PhotoPage.tsx";
 
 const router = createBrowserRouter([
   {
@@ -19,6 +20,10 @@ const router = createBrowserRouter([
       {
         path: "login",
         Component: LoginPage, // changed: was LoginForm, which stretched to full width
+      },
+      {
+        path: "photo/:id", // new: photo detail page (image left, title/description right)
+        Component: PhotoPage,
       },
     ],
   },
