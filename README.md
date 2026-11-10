@@ -1,5 +1,34 @@
 # React + TypeScript + Vite
 
+## Supabase
+
+The app uses [Supabase](https://supabase.com) for the database and storage. The
+shared client lives in `src/utils/supabase.ts`.
+
+1. Create a project at [supabase.com](https://supabase.com) (or open an existing one).
+2. Copy `.env.example` to `.env.local` and fill in:
+   - `VITE_SUPABASE_URL` — project URL
+   - `VITE_SUPABASE_PUBLISHABLE_KEY` — the publishable key (`sb_publishable_...`)
+3. Restart the dev server after changing env values (`npm run dev`).
+
+The publishable key is the same client-side key that older Supabase projects
+call the **anon** key — both are safe to ship in the browser, and the client
+also accepts `VITE_SUPABASE_ANON_KEY` as a fallback. Never put a secret key or
+`service_role` key in a `VITE_` variable, since those are bundled into the client.
+
+```ts
+import { supabase } from "@/utils/supabase";
+
+// Database
+const { data, error } = await supabase.from("photos").select();
+
+// Storage
+const { data: file } = await supabase.storage
+  .from("photos")
+  .upload("example.jpg", file);
+```
+
+
 This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
 
 Currently, two official plugins are available:
