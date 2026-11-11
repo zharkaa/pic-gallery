@@ -50,6 +50,78 @@ export const photos: Photo[] = [
     description:
       "A small wooden cabin sits in deep snow, with smoke rising from its chimney.",
   },
+  {
+    id: "7",
+    title: "Lighthouse in the storm",
+    description:
+      "Waves crash against the rocks below a lone lighthouse while dark clouds roll overhead.",
+  },
+  {
+    id: "8",
+    title: "Golden wheat field",
+    description:
+      "Tall stalks of wheat glow in the late afternoon sun, swaying gently in the breeze.",
+  },
+  {
+    id: "9",
+    title: "Misty lake at dawn",
+    description:
+      "A thin layer of fog drifts over still water as the first colors of morning appear.",
+  },
+  {
+    id: "10",
+    title: "Neon alleyway",
+    description:
+      "Colorful signs reflect on wet pavement in a narrow city alley after the rain.",
+  },
+  {
+    id: "11",
+    title: "Autumn forest path",
+    description:
+      "Red and orange leaves cover a quiet trail that winds between tall trees.",
+  },
+  {
+    id: "12",
+    title: "Starry desert sky",
+    description:
+      "The Milky Way stretches across a clear night sky above dark, rolling dunes.",
+  },
+  {
+    id: "13",
+    title: "Waves on black sand",
+    description:
+      "White foam spreads across a dark volcanic beach as the tide rolls in.",
+  },
+  {
+    id: "14",
+    title: "Old cobblestone street",
+    description:
+      "Warm lamps light a narrow street lined with weathered stone buildings.",
+  },
+  {
+    id: "15",
+    title: "Frozen waterfall",
+    description:
+      "Icicles hang from a cliff where a waterfall has frozen solid in the winter cold.",
+  },
+  {
+    id: "16",
+    title: "Sailboat on turquoise water",
+    description:
+      "A small white sailboat drifts across calm, brightly colored tropical water.",
+  },
+  {
+    id: "17",
+    title: "Cherry blossoms in spring",
+    description:
+      "Pink petals fill the branches of a tree, with a few falling softly to the ground.",
+  },
+  {
+    id: "18",
+    title: "Northern lights over the mountains",
+    description:
+      "Green and purple ribbons of light dance above a snowy mountain range.",
+  },
 ];
 
 export function getPhotoById(id: string) {
