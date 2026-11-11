@@ -1,0 +1,2 @@
+-- Row data loaded by `supabase db reset` (local) / seed runs.
+-- Intentionally empty for now: the gallery is still reading src/data/photos.ts.
