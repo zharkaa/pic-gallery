@@ -7,6 +7,7 @@ import Layout from "./layout.tsx";
 import "./index.css";
 import LoginPage from "./pages/LoginPage.tsx"; // changed: was LoginForm (bare form, no max-width)
 import PhotoPage from "./pages/PhotoPage.tsx";
+import DashboardPage from "./pages/DashboardPage.tsx";
 
 const router = createBrowserRouter([
   {
@@ -24,6 +25,10 @@ const router = createBrowserRouter([
       {
         path: "photo/:id", // new: photo detail page (image left, title/description right)
         Component: PhotoPage,
+      },
+      {
+        path: "dashboard", // new: upload a photo and add its details
+        Component: DashboardPage,
       },
     ],
   },

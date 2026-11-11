@@ -16,6 +16,31 @@ call the **anon** key — both are safe to ship in the browser, and the client
 also accepts `VITE_SUPABASE_ANON_KEY` as a fallback. Never put a secret key or
 `service_role` key in a `VITE_` variable, since those are bundled into the client.
 
+### Authentication
+
+Login uses Supabase Auth with email + password. Supabase returns a signed JWT
+session, stores it in the browser, refreshes it automatically, and attaches it
+to Database/Storage requests so the `authenticated` row-level security policies
+apply.
+
+Accounts are created in the Supabase Dashboard (**Authentication → Users → Add
+user**, then confirm the email if email confirmations are enabled). There is no
+sign-up form in the app. The shared session hook is `src/hooks/use-session.ts`.
+
+### Database and storage
+
+The schema lives in `supabase/migrations/` and creates the `photos` table plus a
+public `photos` storage bucket (public read, signed-in write). Apply it with the
+Supabase CLI:
+
+```bash
+bunx supabase@latest login                       # once per machine
+bunx supabase@latest link --project-ref <ref>    # ref is in VITE_SUPABASE_URL
+bunx supabase@latest db push                     # prompts for the database password
+```
+
+`supabase/seed.sql` is loaded by `supabase db reset` for local development.
+
 ```ts
 import { supabase } from "@/utils/supabase";
 
