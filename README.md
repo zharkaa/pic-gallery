@@ -9,7 +9,7 @@ shared client lives in `src/utils/supabase.ts`.
 2. Copy `.env.example` to `.env.local` and fill in:
    - `VITE_SUPABASE_URL` — project URL
    - `VITE_SUPABASE_PUBLISHABLE_KEY` — the publishable key (`sb_publishable_...`)
-3. Restart the dev server after changing env values (`npm run dev`).
+3. Restart the dev server after changing env values (`bun run dev`).
 
 The publishable key is the same client-side key that older Supabase projects
 call the **anon** key — both are safe to ship in the browser, and the client
