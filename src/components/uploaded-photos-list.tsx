@@ -2,6 +2,7 @@ import { useState } from "react";
 import { EllipsisVertical, Eye, EyeOff, ImageOff, Loader2, Trash2 } from "lucide-react";
 import { cn } from "cn";
 
+import { SkeletonImage } from "@/components/skeleton-image";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -20,6 +21,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { toast } from "@/components/ui/toast";
+import { Skeleton } from "@/components/ui/skeleton";
 import { deletePhoto, updatePhotoPublished, type Photo } from "@/data/photos";
 
 type UploadedPhotosListProps = {
@@ -110,7 +112,7 @@ function UploadedPhotoCard({ photo, onPhotoUpdated, onPhotoDeleted }: UploadedPh
   return (
     <div className="flex flex-col overflow-hidden rounded-xl border bg-card">
       <div className="relative aspect-[4/3] overflow-hidden bg-muted">
-        <img
+        <SkeletonImage
           src={photo.src}
           alt={photo.title}
           loading="lazy"
@@ -228,10 +230,10 @@ export function UploadedPhotosList({
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {Array.from({ length: 6 }).map((_, index) => (
           <div key={index} className="overflow-hidden rounded-xl border">
-            <div className="aspect-[4/3] animate-pulse bg-muted" />
+            <Skeleton className="aspect-[4/3] w-full rounded-none" />
             <div className="flex flex-col gap-2 p-3">
-              <div className="h-4 w-2/3 animate-pulse rounded bg-muted" />
-              <div className="h-3 w-1/3 animate-pulse rounded bg-muted" />
+              <Skeleton className="h-4 w-2/3" />
+              <Skeleton className="h-3 w-1/3" />
             </div>
           </div>
         ))}

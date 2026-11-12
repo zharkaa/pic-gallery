@@ -2,7 +2,9 @@ import { useEffect, useState } from "react";
 import { ImageOff } from "lucide-react";
 import { Link } from "react-router";
 
+import { SkeletonImage } from "@/components/skeleton-image";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { fetchPhotos, type Photo } from "@/data/photos";
 
 type GalleryState = "loading" | "ready" | "error";
@@ -41,10 +43,16 @@ function App() {
 
   if (state === "loading") {
     return (
-      <div className="grid w-full grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+      <div
+        role="status"
+        aria-busy="true"
+        aria-label="Loading photos"
+        className="grid w-full flex-1 auto-rows-fr grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4"
+      >
         {Array.from({ length: 8 }).map((_, index) => (
-          <div key={index} className="aspect-[4/3] animate-pulse bg-muted" />
+          <Skeleton key={index} className="h-full w-full rounded-none" />
         ))}
+        <span className="sr-only">Loading photos…</span>
       </div>
     );
   }
@@ -90,7 +98,7 @@ function App() {
           to={`/photo/${photo.id}`}
           className="group relative aspect-[4/3] overflow-hidden bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
         >
-          <img
+          <SkeletonImage
             src={photo.src}
             alt={photo.title}
             className="h-full w-full object-cover transition-transform duration-500 ease-out group-hover:scale-105"

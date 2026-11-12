@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
-import { CalendarDays, Loader2 } from "lucide-react";
+import { CalendarDays } from "lucide-react";
 import { Link, useParams } from "react-router";
 
 import { EditPhotoDialog } from "@/components/edit-photo-dialog";
+import { SkeletonImage } from "@/components/skeleton-image";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { fetchPhotoById, type Photo } from "@/data/photos";
 import { useSession } from "@/hooks/use-session";
 
@@ -74,8 +76,29 @@ export default function PhotoPage() {
 
   if (loadState === "loading") {
     return (
-      <div className="flex flex-1 items-center justify-center p-10">
-        <Loader2 className="size-5 animate-spin text-muted-foreground" />
+      <div
+        role="status"
+        aria-busy="true"
+        aria-label="Loading photo"
+        className="grid h-[calc(100svh-4rem-1px)] grid-cols-1 grid-rows-[minmax(0,1.5fr)_minmax(0,1fr)] overflow-hidden md:grid-cols-2 md:grid-rows-1"
+      >
+        <Skeleton className="h-full w-full rounded-none" />
+
+        <div className="flex min-h-0 flex-col gap-4 overflow-y-auto p-6 md:p-10">
+          <Skeleton className="h-9 w-2/3" />
+          <div className="flex flex-col gap-2">
+            <Skeleton className="h-4 w-full" />
+            <Skeleton className="h-4 w-5/6" />
+            <Skeleton className="h-4 w-3/5" />
+          </div>
+          <Skeleton className="h-4 w-44" />
+          <div className="mt-auto flex flex-wrap gap-1.5 border-t pt-4">
+            <Skeleton className="h-5 w-14" />
+            <Skeleton className="h-5 w-20" />
+            <Skeleton className="h-5 w-16" />
+          </div>
+        </div>
+
         <span className="sr-only">Loading photo…</span>
       </div>
     );
@@ -127,7 +150,7 @@ export default function PhotoPage() {
       {/* Left half: the picture, scaled to fit inside the available space.
           `bg-background` makes the empty sides blend into the current theme. */}
       <div className="relative min-h-0 overflow-hidden bg-background">
-        <img src={photo.src} alt={photo.title} className="h-full w-full object-contain" />
+        <SkeletonImage src={photo.src} alt={photo.title} className="h-full w-full object-contain" />
       </div>
 
       {/* Right half: title, with the description right below it. Scrolls on its
