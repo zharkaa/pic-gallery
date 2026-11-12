@@ -118,6 +118,26 @@
   --sidebar-ring: oklch(0.556 0 0);
 }
 
+/*
+ * Dashboard panels sit on a white background in light mode, where the default
+ * border colour is almost invisible. Strengthen it only inside the dashboard
+ * and keep the existing dark-mode colours.
+ */
+.dashboard-surface {
+  --border: oklch(0.85 0 0);
+  --input: oklch(0.85 0 0);
+}
+
+/* `Card` uses a ring instead of a border, so point it at the same colour. */
+.dashboard-surface [data-slot="card"] {
+  --tw-ring-color: var(--border);
+}
+
+.dark .dashboard-surface {
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;

@@ -87,7 +87,7 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-6 px-6 py-8">
+    <div className="dashboard-surface mx-auto flex w-full max-w-6xl flex-1 flex-col gap-6 px-6 py-8">
       <div className="grid gap-6 lg:grid-cols-[15rem_minmax(0,1fr)] lg:items-start">
         <DashboardSidebar
           view={view}
