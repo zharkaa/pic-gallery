@@ -1,13 +1,75 @@
+import { useEffect, useState } from "react";
+import { Loader2 } from "lucide-react";
 import { Link, useParams } from "react-router";
 
-import { getPhotoById } from "@/data/photos";
+import { EditPhotoDialog } from "@/components/edit-photo-dialog";
+import { Button } from "@/components/ui/button";
+import { fetchPhotoById, type Photo } from "@/data/photos";
+import { useSession } from "@/hooks/use-session";
+
+type LoadState = "loading" | "ready" | "not-found" | "error";
+
+type PhotoResult = {
+  key: string;
+  photo: Photo | null;
+  error: string | null;
+};
 
 export default function PhotoPage() {
   const { id } = useParams();
-  const photo = id ? getPhotoById(id) : undefined;
+  const { status } = useSession();
 
-  // TODO: replace with a nicer "not found" page later if needed.
-  if (!photo) {
+  const [attempt, setAttempt] = useState(0);
+  const [result, setResult] = useState<PhotoResult | null>(null);
+
+  useEffect(() => {
+    if (!id) return;
+
+    let active = true;
+    const requestKey = `${id}:${attempt}`;
+
+    fetchPhotoById(id)
+      .then((fetchedPhoto) => {
+        if (!active) return;
+        setResult({ key: requestKey, photo: fetchedPhoto, error: null });
+      })
+      .catch((error: unknown) => {
+        if (!active) return;
+        setResult({
+          key: requestKey,
+          photo: null,
+          error: error instanceof Error ? error.message : "Could not load this photo.",
+        });
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [id, attempt]);
+
+  // Derive the view from the resolved request so switching photos (or retrying)
+  // shows the loading state without setting it synchronously in an effect.
+  const requestKey = id ? `${id}:${attempt}` : null;
+  const photo = result?.photo ?? null;
+  const loadError = result?.error ?? null;
+
+  let loadState: LoadState;
+  if (!id) loadState = "not-found";
+  else if (!result || result.key !== requestKey) loadState = "loading";
+  else if (result.error) loadState = "error";
+  else if (!result.photo) loadState = "not-found";
+  else loadState = "ready";
+
+  if (loadState === "loading") {
+    return (
+      <div className="flex flex-1 items-center justify-center p-10">
+        <Loader2 className="size-5 animate-spin text-muted-foreground" />
+        <span className="sr-only">Loading photo…</span>
+      </div>
+    );
+  }
+
+  if (loadState === "not-found") {
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-4 p-6 text-center">
         <h1 className="text-2xl font-semibold">Photo not found</h1>
@@ -18,28 +80,53 @@ export default function PhotoPage() {
     );
   }
 
+  if (loadState === "error" || !photo) {
+    return (
+      <div className="flex flex-1 flex-col items-center justify-center gap-4 p-6 text-center">
+        <h1 className="text-2xl font-semibold">Could not load photo</h1>
+        <p className="max-w-md text-sm text-muted-foreground">{loadError}</p>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => setAttempt((value) => value + 1)}>
+            Try again
+          </Button>
+          <Button nativeButton={false} render={<Link to="/" />}>
+            Back to gallery
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  function handleUpdated(updatedPhoto: Photo) {
+    setResult((current) => (current ? { ...current, photo: updatedPhoto } : current));
+  }
+
   return (
-    // Two halves: image on the left, title/description on the right (stacked on mobile).
-    <div className="grid flex-1 grid-cols-1 md:grid-cols-2">
-      {/* Left half: the picture. Same aspect/object-cover approach as the cards. */}
-      <div className="relative min-h-[50svh] overflow-hidden bg-muted md:min-h-0">
-        {photo.src ? (
-          <img
-            src={photo.src}
-            alt={photo.title}
-            className="h-full w-full object-cover"
-          />
-        ) : (
-          <div className="flex h-full w-full items-center justify-center p-6 text-center text-sm text-muted-foreground">
-            Image placeholder — {photo.title}
-          </div>
-        )}
+    // Locked to the space below the navbar so the page itself never scrolls.
+    // Mobile stacks image/details; desktop splits them side by side.
+    <div className="relative grid h-[calc(100svh-4rem-1px)] grid-cols-1 grid-rows-[minmax(0,1.5fr)_minmax(0,1fr)] overflow-hidden md:grid-cols-2 md:grid-rows-1">
+      {/* Edit lives in the top corner and only appears for signed-in users. */}
+      {status === "signed-in" && (
+        <div className="absolute top-4 right-4 z-10">
+          <EditPhotoDialog photo={photo} onUpdated={handleUpdated} />
+        </div>
+      )}
+
+      {/* Left half: the picture, scaled to fit inside the available space.
+          `bg-background` makes the empty sides blend into the current theme. */}
+      <div className="relative min-h-0 overflow-hidden bg-background">
+        <img src={photo.src} alt={photo.title} className="h-full w-full object-contain" />
       </div>
 
-      {/* Right half: title, with the description right below it. */}
-      <div className="flex flex-col gap-4 p-6 md:p-10">
-        <h1 className="text-3xl font-semibold tracking-tight">{photo.title}</h1>
-        <p className="text-muted-foreground">{photo.description}</p>
+      {/* Right half: title, with the description right below it. Scrolls on its
+          own if the text is longer than the screen, keeping the page fixed. */}
+      <div className="flex min-h-0 flex-col gap-4 overflow-y-auto p-6 md:p-10">
+        <h1 className="pr-24 text-3xl font-semibold tracking-tight">{photo.title}</h1>
+        {photo.description ? (
+          <p className="text-muted-foreground">{photo.description}</p>
+        ) : (
+          <p className="text-sm text-muted-foreground italic">No description yet.</p>
+        )}
       </div>
     </div>
   );
