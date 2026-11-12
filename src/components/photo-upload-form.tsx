@@ -12,6 +12,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { DatePicker } from "@/components/date-picker";
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
@@ -404,13 +405,12 @@ export function PhotoUploadForm({ className, onSaved }: PhotoUploadFormProps) {
             <div className="grid gap-5 sm:grid-cols-2">
               <Field>
                 <FieldLabel htmlFor="dateTaken">Date taken</FieldLabel>
-                <Input
+                <DatePicker
                   id="dateTaken"
-                  type="date"
                   max={maxDate}
                   value={dateTaken}
-                  onChange={(event) => {
-                    setDateTaken(event.target.value);
+                  onChange={(value) => {
+                    setDateTaken(value);
                     setSaved(false);
                   }}
                 />
