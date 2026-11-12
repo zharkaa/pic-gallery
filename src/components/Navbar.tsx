@@ -3,7 +3,7 @@ import { LayoutDashboard, LogIn, LogOut, Menu } from "lucide-react";
 import { Link, useNavigate } from "react-router";
 
 import { useSession } from "@/hooks/use-session";
-import { toast } from "@/components/ui/toast";
+import { toast } from "@/components/ui/toast-manager";
 import { supabase } from "@/utils/supabase";
 
 import { ModeToggle } from "./mode-toggle";

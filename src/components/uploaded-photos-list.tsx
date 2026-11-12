@@ -20,7 +20,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { toast } from "@/components/ui/toast";
+import { toast } from "@/components/ui/toast-manager";
 import { Skeleton } from "@/components/ui/skeleton";
 import { deletePhoto, updatePhotoPublished, type Photo } from "@/data/photos";
 
