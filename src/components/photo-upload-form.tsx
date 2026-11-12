@@ -59,7 +59,13 @@ function todayAsInputValue() {
   return `${today.getFullYear()}-${month}-${day}`;
 }
 
-export function PhotoUploadForm({ className }: { className?: string }) {
+type PhotoUploadFormProps = {
+  className?: string;
+  /** Called after a photo is uploaded and its metadata row is saved. */
+  onSaved?: () => void;
+};
+
+export function PhotoUploadForm({ className, onSaved }: PhotoUploadFormProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [file, setFile] = useState<File | null>(null);
@@ -214,6 +220,7 @@ export function PhotoUploadForm({ className }: { className?: string }) {
     setIsSaving(false);
     clearForm();
     setSaved(true);
+    onSaved?.();
   }
 
   return (
