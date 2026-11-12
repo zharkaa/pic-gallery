@@ -1,8 +1,18 @@
 import { useState } from "react";
-import { EllipsisVertical, Eye, EyeOff, ImageOff, Loader2 } from "lucide-react";
+import { EllipsisVertical, Eye, EyeOff, ImageOff, Loader2, Trash2 } from "lucide-react";
 import { cn } from "cn";
 
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -10,7 +20,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { toast } from "@/components/ui/toast";
-import { updatePhotoPublished, type Photo } from "@/data/photos";
+import { deletePhoto, updatePhotoPublished, type Photo } from "@/data/photos";
 
 type UploadedPhotosListProps = {
   photos: Photo[];
@@ -18,6 +28,7 @@ type UploadedPhotosListProps = {
   error: string | null;
   onRetry: () => void;
   onPhotoUpdated: (photo: Photo) => void;
+  onPhotoDeleted: (id: string) => void;
 };
 
 function formatCreatedAt(value: string) {
@@ -34,11 +45,14 @@ function formatCreatedAt(value: string) {
 type UploadedPhotoCardProps = {
   photo: Photo;
   onPhotoUpdated: (photo: Photo) => void;
+  onPhotoDeleted: (id: string) => void;
 };
 
-/** One non-clickable card with a menu for publishing or hiding the photo. */
-function UploadedPhotoCard({ photo, onPhotoUpdated }: UploadedPhotoCardProps) {
+/** One non-clickable card with menus for publishing, hiding, and deleting the photo. */
+function UploadedPhotoCard({ photo, onPhotoUpdated, onPhotoDeleted }: UploadedPhotoCardProps) {
   const [isSaving, setIsSaving] = useState(false);
+  const [isDeleteOpen, setIsDeleteOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const nextPublished = !photo.published;
 
   async function handleTogglePublished() {
@@ -68,6 +82,31 @@ function UploadedPhotoCard({ photo, onPhotoUpdated }: UploadedPhotoCardProps) {
     }
   }
 
+  async function handleDelete() {
+    if (isDeleting) return;
+
+    setIsDeleting(true);
+
+    try {
+      await deletePhoto(photo);
+      setIsDeleteOpen(false);
+      onPhotoDeleted(photo.id);
+      toast.add({
+        title: "Photo deleted",
+        description: "The photo and its image file were removed.",
+        type: "success",
+      });
+    } catch (deleteError) {
+      toast.add({
+        title: "Could not delete the photo",
+        description: deleteError instanceof Error ? deleteError.message : "Please try again.",
+        type: "error",
+      });
+    } finally {
+      setIsDeleting(false);
+    }
+  }
+
   return (
     <div className="flex flex-col overflow-hidden rounded-xl border bg-card">
       <div className="relative aspect-[4/3] overflow-hidden bg-muted">
@@ -88,6 +127,53 @@ function UploadedPhotoCard({ photo, onPhotoUpdated }: UploadedPhotoCardProps) {
         >
           {photo.published ? "Published" : "Hidden"}
         </span>
+
+        <div className="absolute top-2 right-2">
+          <Dialog open={isDeleteOpen} onOpenChange={setIsDeleteOpen}>
+            <DialogTrigger
+              render={
+                <Button
+                  type="button"
+                  variant="destructive"
+                  size="icon-sm"
+                  aria-label={`Delete ${photo.title}`}
+                  className="shadow-sm backdrop-blur"
+                />
+              }
+            >
+              <Trash2 />
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Delete this photo?</DialogTitle>
+                <DialogDescription>
+                  “{photo.title}” and its image file will be permanently deleted. This cannot be
+                  undone.
+                </DialogDescription>
+              </DialogHeader>
+              <DialogFooter>
+                <DialogClose
+                  render={<Button type="button" variant="outline" disabled={isDeleting} />}
+                >
+                  Cancel
+                </DialogClose>
+                <Button type="button" variant="destructive" onClick={handleDelete} disabled={isDeleting}>
+                  {isDeleting ? (
+                    <>
+                      <Loader2 className="animate-spin" />
+                      Deleting…
+                    </>
+                  ) : (
+                    <>
+                      <Trash2 />
+                      Delete
+                    </>
+                  )}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        </div>
       </div>
 
       <div className="flex items-center justify-between gap-2 p-3">
@@ -135,6 +221,7 @@ export function UploadedPhotosList({
   error,
   onRetry,
   onPhotoUpdated,
+  onPhotoDeleted,
 }: UploadedPhotosListProps) {
   if (isLoading) {
     return (
@@ -181,7 +268,11 @@ export function UploadedPhotosList({
     <ul className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
       {photos.map((photo) => (
         <li key={photo.id}>
-          <UploadedPhotoCard photo={photo} onPhotoUpdated={onPhotoUpdated} />
+          <UploadedPhotoCard
+            photo={photo}
+            onPhotoUpdated={onPhotoUpdated}
+            onPhotoDeleted={onPhotoDeleted}
+          />
         </li>
       ))}
     </ul>

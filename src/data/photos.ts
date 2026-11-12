@@ -85,6 +85,17 @@ export async function updatePhotoPublished(id: string, published: boolean): Prom
   return toPhoto(data as PhotoRow);
 }
 
+/** Permanently delete a photo's metadata row and its image file. */
+export async function deletePhoto(photo: Photo): Promise<void> {
+  const { error } = await supabase.from("photos").delete().eq("id", photo.id);
+
+  if (error) throw error;
+
+  // The row is already gone, so a failed file cleanup shouldn't make the UI
+  // report the photo as still existing. Supabase removes the object best-effort.
+  await supabase.storage.from(BUCKET).remove([photo.storagePath]);
+}
+
 export type PhotoDetails = {
   title: string;
   description: string;

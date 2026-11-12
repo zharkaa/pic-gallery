@@ -62,6 +62,14 @@ export default function DashboardPage() {
     });
   }
 
+  function handlePhotoDeleted(id: string) {
+    setUploads((current) => {
+      if (!current) return current;
+
+      return { ...current, photos: current.photos.filter((photo) => photo.id !== id) };
+    });
+  }
+
 
   if (status === "loading") {
     return (
@@ -114,6 +122,7 @@ export default function DashboardPage() {
                 error={currentUploads?.error ?? null}
                 onRetry={() => setAttempt((value) => value + 1)}
                 onPhotoUpdated={handlePhotoUpdated}
+                onPhotoDeleted={handlePhotoDeleted}
               />
             </>
           )}
