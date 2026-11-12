@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Loader2 } from "lucide-react";
+import { CalendarDays, Loader2 } from "lucide-react";
 import { Link, useParams } from "react-router";
 
 import { EditPhotoDialog } from "@/components/edit-photo-dialog";
@@ -14,6 +14,18 @@ type PhotoResult = {
   photo: Photo | null;
   error: string | null;
 };
+
+/** `date_taken` is a plain YYYY-MM-DD date, so parse it in local time. */
+function formatDateTaken(value: string) {
+  const date = new Date(`${value}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return value;
+
+  return date.toLocaleDateString(undefined, {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
+}
 
 export default function PhotoPage() {
   const { id } = useParams();
@@ -127,6 +139,35 @@ export default function PhotoPage() {
         ) : (
           <p className="text-sm text-muted-foreground italic">No description yet.</p>
         )}
+
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <CalendarDays className="size-4 shrink-0" />
+          {photo.dateTaken ? (
+            <span>
+              Taken on <time dateTime={photo.dateTaken}>{formatDateTaken(photo.dateTaken)}</time>
+            </span>
+          ) : (
+            <span className="italic">No date added</span>
+          )}
+        </div>
+
+        {/* Tags stay anchored to the bottom of the detail column. */}
+        <ul aria-label="Tags" className="mt-auto flex flex-wrap gap-1.5 border-t pt-4">
+          {photo.tags.length > 0 ? (
+            photo.tags.map((tag) => (
+              <li
+                key={tag}
+                className="rounded-md border border-border/60 bg-muted/40 px-2 py-0.5 text-xs text-muted-foreground"
+              >
+                {tag}
+              </li>
+            ))
+          ) : (
+            <li className="rounded-md border border-dashed border-border/60 px-2 py-0.5 text-xs text-muted-foreground italic">
+              No tags added
+            </li>
+          )}
+        </ul>
       </div>
     </div>
   );

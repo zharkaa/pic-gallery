@@ -41,9 +41,9 @@ function App() {
 
   if (state === "loading") {
     return (
-      <div className="grid flex-1 auto-rows-[minmax(38svh,1fr)] grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
-        {Array.from({ length: 6 }).map((_, index) => (
-          <div key={index} className="min-h-0 animate-pulse bg-muted" />
+      <div className="grid w-full grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+        {Array.from({ length: 8 }).map((_, index) => (
+          <div key={index} className="aspect-[4/3] animate-pulse bg-muted" />
         ))}
       </div>
     );
@@ -79,30 +79,29 @@ function App() {
   }
 
   return (
-    // Fills all remaining space below the navbar, edge to edge.
-    <div className="flex flex-1 flex-col">
-      <div className="grid flex-1 auto-rows-[minmax(38svh,1fr)] grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
-        {photos.map((photo) => (
-          // Whole tile is a link to its detail page. The image fills the tile,
-          // and the title panel slides up over the bottom half on hover/focus.
-          <Link
-            key={photo.id}
-            to={`/photo/${photo.id}`}
-            className="group relative block min-h-0 overflow-hidden bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
-          >
-            <img
-              src={photo.src}
-              alt={photo.title}
-              className="h-full w-full object-cover transition-transform duration-500 ease-out group-hover:scale-105"
-            />
+    // Full-width gallery with uniform 4:3 tiles that scroll normally instead of
+    // stretching to fill the viewport.
+    <div className="grid w-full grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+      {photos.map((photo) => (
+        // Whole tile is a link to its detail page. The image fills the tile,
+        // and the title panel slides up over the bottom half on hover/focus.
+        <Link
+          key={photo.id}
+          to={`/photo/${photo.id}`}
+          className="group relative aspect-[4/3] overflow-hidden bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+        >
+          <img
+            src={photo.src}
+            alt={photo.title}
+            className="h-full w-full object-cover transition-transform duration-500 ease-out group-hover:scale-105"
+          />
 
-            {/* Starts fully below the tile, then slides up to cover its lower half. */}
-            <div className="absolute inset-x-0 bottom-0 flex h-1/2 translate-y-full items-end bg-gradient-to-t from-black/90 via-black/60 to-transparent p-4 transition-transform duration-300 ease-out group-hover:translate-y-0 group-focus-visible:translate-y-0">
-              <h2 className="text-lg font-medium text-white">{photo.title}</h2>
-            </div>
-          </Link>
-        ))}
-      </div>
+          {/* Starts fully below the tile, then slides up to cover its lower half. */}
+          <div className="absolute inset-x-0 bottom-0 flex h-1/2 translate-y-full items-end bg-gradient-to-t from-black/90 via-black/60 to-transparent p-4 transition-transform duration-300 ease-out group-hover:translate-y-0 group-focus-visible:translate-y-0">
+            <h2 className="text-lg font-medium text-white">{photo.title}</h2>
+          </div>
+        </Link>
+      ))}
     </div>
   );
 }
