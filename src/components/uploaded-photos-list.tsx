@@ -137,7 +137,7 @@ function UploadedPhotoCard({ photo, onPhotoUpdated, onPhotoDeleted }: UploadedPh
                   variant="destructive"
                   size="icon-sm"
                   aria-label={`Delete ${photo.title}`}
-                  className="shadow-sm backdrop-blur"
+                  className="bg-red-600 text-white shadow-md ring-1 ring-white/40 hover:bg-red-700 focus-visible:ring-white dark:bg-red-600 dark:ring-black/30 dark:hover:bg-red-500 dark:focus-visible:ring-black/50"
                 />
               }
             >
