@@ -17,6 +17,7 @@ import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/c
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import { toast } from "@/components/ui/toast-manager";
 import { prepareUpload } from "@/lib/image-processing";
 import { supabase } from "@/utils/supabase";
 
@@ -81,7 +82,6 @@ export function PhotoUploadForm({ className, userId, onSaved }: PhotoUploadFormP
   const [tagDraft, setTagDraft] = useState("");
   const [published, setPublished] = useState(true);
   const [errors, setErrors] = useState<FormErrors>({});
-  const [saved, setSaved] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
@@ -106,7 +106,6 @@ export function PhotoUploadForm({ className, userId, onSaved }: PhotoUploadFormP
 
     setFile(nextFile);
     setErrors((prev) => ({ ...prev, image: undefined }));
-    setSaved(false);
     setSubmitError(null);
   }, []);
 
@@ -160,7 +159,6 @@ export function PhotoUploadForm({ className, userId, onSaved }: PhotoUploadFormP
 
   function resetForm() {
     clearForm();
-    setSaved(false);
     setSubmitError(null);
   }
 
@@ -182,7 +180,6 @@ export function PhotoUploadForm({ className, userId, onSaved }: PhotoUploadFormP
     if (!selectedFile) return;
 
     setIsSaving(true);
-    setSaved(false);
     setSubmitError(null);
 
     try {
@@ -239,8 +236,13 @@ export function PhotoUploadForm({ className, userId, onSaved }: PhotoUploadFormP
         throw insertError;
       }
 
+      const savedTitle = title.trim();
       clearForm();
-      setSaved(true);
+      toast.add({
+        title: "Photo uploaded",
+        description: `“${savedTitle}” was added to your gallery.`,
+        type: "success",
+      });
       onSaved?.();
     } catch (error) {
       setSubmitError(error instanceof Error ? error.message : "Could not save the photo.");
@@ -341,15 +343,6 @@ export function PhotoUploadForm({ className, userId, onSaved }: PhotoUploadFormP
           <CardDescription>Add a title and any extra details for this photo.</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-5">
-          {saved && (
-            <div
-              role="status"
-              className="rounded-lg border border-emerald-600/30 bg-emerald-600/10 px-3 py-2 text-sm text-emerald-700 dark:text-emerald-400"
-            >
-              Photo saved.
-            </div>
-          )}
-
           {submitError && (
             <div
               role="alert"
@@ -365,10 +358,7 @@ export function PhotoUploadForm({ className, userId, onSaved }: PhotoUploadFormP
               <Input
                 id="title"
                 value={title}
-                onChange={(event) => {
-                  setTitle(event.target.value);
-                  setSaved(false);
-                }}
+                onChange={(event) => setTitle(event.target.value)}
                 placeholder="Sunset over the ocean"
                 aria-invalid={!!errors.title}
                 aria-describedby={errors.title ? "title-error" : undefined}
@@ -382,10 +372,7 @@ export function PhotoUploadForm({ className, userId, onSaved }: PhotoUploadFormP
                 id="description"
                 rows={5}
                 value={description}
-                onChange={(event) => {
-                  setDescription(event.target.value);
-                  setSaved(false);
-                }}
+                onChange={(event) => setDescription(event.target.value)}
                 placeholder="Where was it taken? What makes it interesting?"
               />
               <FieldDescription>Optional. Shows below the title on the photo page.</FieldDescription>
@@ -434,10 +421,7 @@ export function PhotoUploadForm({ className, userId, onSaved }: PhotoUploadFormP
                   id="dateTaken"
                   max={maxDate}
                   value={dateTaken}
-                  onChange={(value) => {
-                    setDateTaken(value);
-                    setSaved(false);
-                  }}
+                  onChange={(value) => setDateTaken(value)}
                 />
               </Field>
 
@@ -449,10 +433,7 @@ export function PhotoUploadForm({ className, userId, onSaved }: PhotoUploadFormP
                 <Switch
                   id="published"
                   checked={published}
-                  onCheckedChange={(checked) => {
-                    setPublished(checked);
-                    setSaved(false);
-                  }}
+                  onCheckedChange={(checked) => setPublished(checked)}
                 />
               </Field>
             </div>
