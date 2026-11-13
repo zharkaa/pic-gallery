@@ -148,9 +148,24 @@ export default function PhotoPage() {
       )}
 
       {/* Left half: the picture, scaled to fit inside the available space.
-          `bg-background` makes the empty sides blend into the current theme. */}
+          `bg-background` makes the empty sides blend into the current theme.
+          The small thumbnail shows immediately while the full image loads. */}
       <div className="relative min-h-0 overflow-hidden bg-background">
-        <SkeletonImage src={photo.src} alt={photo.title} className="h-full w-full object-contain" />
+        {photo.thumbnailPath && (
+          <img
+            src={photo.thumbnailSrc}
+            alt=""
+            aria-hidden="true"
+            decoding="async"
+            className="pointer-events-none absolute inset-0 h-full w-full scale-105 object-contain blur-2xl"
+          />
+        )}
+        <SkeletonImage
+          src={photo.src}
+          alt={photo.title}
+          skeletonClassName={photo.thumbnailPath ? "bg-transparent" : undefined}
+          className="relative h-full w-full object-contain"
+        />
       </div>
 
       {/* Right half: title, with the description right below it. Scrolls on its

@@ -32,7 +32,9 @@ sign-up form in the app. The shared session hook is `src/hooks/use-session.ts`.
 The schema lives in `supabase/migrations/` and creates the `photos` table plus a
 private `photos` storage bucket. Each row records its owner; anonymous visitors
 only see published rows, and images are served with short-lived signed URLs
-(drafts are visible to their owner only). Apply it with the Supabase CLI:
+(drafts are visible to their owner only). Uploads also generate a small grid
+thumbnail in the browser; older photos can be backfilled from the dashboard.
+Apply it with the Supabase CLI:
 
 ```bash
 bunx supabase@latest login                       # once per machine

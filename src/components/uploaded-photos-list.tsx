@@ -95,7 +95,7 @@ function UploadedPhotoCard({ photo, onPhotoUpdated, onPhotoDeleted }: UploadedPh
       onPhotoDeleted(photo.id);
       toast.add({
         title: "Photo deleted",
-        description: "The photo and its image file were removed.",
+        description: "The photo and its image files were removed.",
         type: "success",
       });
     } catch (deleteError) {
@@ -113,9 +113,10 @@ function UploadedPhotoCard({ photo, onPhotoUpdated, onPhotoDeleted }: UploadedPh
     <div className="flex flex-col overflow-hidden rounded-xl border bg-card">
       <div className="relative aspect-[4/3] overflow-hidden bg-muted">
         <SkeletonImage
-          src={photo.src}
+          src={photo.thumbnailSrc}
           alt={photo.title}
           loading="lazy"
+          decoding="async"
           className="h-full w-full object-cover"
         />
 
@@ -149,7 +150,7 @@ function UploadedPhotoCard({ photo, onPhotoUpdated, onPhotoDeleted }: UploadedPh
               <DialogHeader>
                 <DialogTitle>Delete this photo?</DialogTitle>
                 <DialogDescription>
-                  “{photo.title}” and its image file will be permanently deleted. This cannot be
+                  “{photo.title}” and its image files will be permanently deleted. This cannot be
                   undone.
                 </DialogDescription>
               </DialogHeader>

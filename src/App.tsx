@@ -99,8 +99,10 @@ function App() {
           className="group relative aspect-[4/3] overflow-hidden bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
         >
           <SkeletonImage
-            src={photo.src}
+            src={photo.thumbnailSrc}
             alt={photo.title}
+            loading="lazy"
+            decoding="async"
             className="h-full w-full object-cover transition-transform duration-500 ease-out group-hover:scale-105"
           />
 

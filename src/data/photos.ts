@@ -1,3 +1,4 @@
+import { createThumbnailFromBlob } from "@/lib/image-processing";
 import { supabase } from "@/utils/supabase";
 
 const BUCKET = "photos";
@@ -19,13 +20,16 @@ export type Photo = {
   title: string;
   description: string;
   storagePath: string;
+  thumbnailPath: string | null;
   tags: string[];
   dateTaken: string | null;
   published: boolean;
   ownerId: string;
   createdAt: string;
-  /** Short-lived signed URL of the image inside the private `photos` bucket. */
+  /** Short-lived signed URL of the full-size image in the private bucket. */
   src: string;
+  /** Small signed URL for grids, falling back to `src` when no thumbnail exists. */
+  thumbnailSrc: string;
 };
 
 type PhotoRow = {
@@ -33,6 +37,7 @@ type PhotoRow = {
   title: string;
   description: string | null;
   storage_path: string;
+  thumbnail_path: string | null;
   tags: string[] | null;
   date_taken: string | null;
   published: boolean;
@@ -40,23 +45,28 @@ type PhotoRow = {
   created_at: string;
 };
 
-function toPhoto(row: PhotoRow, src: string): Photo {
+function toPhoto(row: PhotoRow, src: string, thumbnailSrc: string): Photo {
   return {
     id: row.id,
     title: row.title,
     description: row.description ?? "",
     storagePath: row.storage_path,
+    thumbnailPath: row.thumbnail_path,
     tags: row.tags ?? [],
     dateTaken: row.date_taken,
     published: row.published,
     ownerId: row.owner_id,
     createdAt: row.created_at,
     src,
+    thumbnailSrc,
   };
 }
 
+/** `grid` signs only what the gallery tiles need; `all` also signs originals. */
+type SignMode = "all" | "grid";
+
 /** Resolve signed URLs for a batch of rows, reusing cached URLs when possible. */
-async function withSignedUrls(rows: PhotoRow[]): Promise<Photo[]> {
+async function withSignedUrls(rows: PhotoRow[], mode: SignMode = "all"): Promise<Photo[]> {
   if (rows.length === 0) return [];
 
   const now = Date.now();
@@ -64,13 +74,20 @@ async function withSignedUrls(rows: PhotoRow[]): Promise<Photo[]> {
   const pathsToSign = new Set<string>();
 
   for (const row of rows) {
-    const cached = signedUrlCache.get(row.storage_path);
+    const paths =
+      mode === "all"
+        ? [row.storage_path, ...(row.thumbnail_path ? [row.thumbnail_path] : [])]
+        : [row.thumbnail_path ?? row.storage_path];
 
-    if (cached && cached.expiresAt > now) {
-      signedUrls.set(row.storage_path, cached.url);
-    } else {
-      if (cached) signedUrlCache.delete(row.storage_path);
-      pathsToSign.add(row.storage_path);
+    for (const path of paths) {
+      const cached = signedUrlCache.get(path);
+
+      if (cached && cached.expiresAt > now) {
+        signedUrls.set(path, cached.url);
+      } else {
+        if (cached) signedUrlCache.delete(path);
+        pathsToSign.add(path);
+      }
     }
   }
 
@@ -91,7 +108,17 @@ async function withSignedUrls(rows: PhotoRow[]): Promise<Photo[]> {
     }
   }
 
-  return rows.map((row) => toPhoto(row, signedUrls.get(row.storage_path) ?? MISSING_IMAGE_SRC));
+  return rows.map((row) => {
+    const originalSrc = signedUrls.get(row.storage_path) ?? MISSING_IMAGE_SRC;
+    const thumbnailSrc = row.thumbnail_path
+      ? (signedUrls.get(row.thumbnail_path) ?? originalSrc)
+      : originalSrc;
+
+    // The gallery only needs the small image; detail/dashboard views need both.
+    return mode === "grid"
+      ? toPhoto(row, thumbnailSrc, thumbnailSrc)
+      : toPhoto(row, originalSrc, thumbnailSrc);
+  });
 }
 
 async function rowToPhoto(row: PhotoRow): Promise<Photo> {
@@ -109,7 +136,7 @@ export async function fetchPhotos(): Promise<Photo[]> {
 
   if (error) throw error;
 
-  return withSignedUrls((data ?? []) as PhotoRow[]);
+  return withSignedUrls((data ?? []) as PhotoRow[], "grid");
 }
 
 /** The signed-in user's photos, newest first, including their drafts. */
@@ -151,13 +178,15 @@ export async function updatePhotoPublished(id: string, published: boolean): Prom
   return rowToPhoto(data as PhotoRow);
 }
 
-/** Permanently delete a photo's image file and its metadata row. */
+/** Permanently delete a photo's image files and its metadata row. */
 export async function deletePhoto(photo: Photo): Promise<void> {
-  // Remove the file first. If cleanup fails, the row still exists and the
-  // caller can retry instead of leaving an orphaned object behind.
-  const { error: storageError } = await supabase.storage
-    .from(BUCKET)
-    .remove([photo.storagePath]);
+  // Remove the files first. If cleanup fails, the row still exists and the
+  // caller can retry instead of leaving orphaned objects behind.
+  const paths = [photo.storagePath, photo.thumbnailPath].filter(
+    (path): path is string => Boolean(path),
+  );
+
+  const { error: storageError } = await supabase.storage.from(BUCKET).remove(paths);
 
   if (storageError) throw storageError;
 
@@ -190,4 +219,59 @@ export async function updatePhotoDetails(id: string, details: PhotoDetails): Pro
   if (error) throw error;
 
   return rowToPhoto(data as PhotoRow);
+}
+
+/** Attach a generated thumbnail to an existing photo. */
+export async function updatePhotoThumbnail(id: string, thumbnailPath: string): Promise<Photo> {
+  const { data, error } = await supabase
+    .from("photos")
+    .update({ thumbnail_path: thumbnailPath })
+    .eq("id", id)
+    .select("*")
+    .single();
+
+  if (error) throw error;
+
+  return rowToPhoto(data as PhotoRow);
+}
+
+/**
+ * Generate a thumbnail for an existing photo and store it in the owner's
+ * folder. Used by the dashboard backfill for photos uploaded before thumbnails.
+ */
+export async function optimizePhotoThumbnail(photo: Photo, userId: string): Promise<Photo> {
+  // Download with the current session so a long backfill cannot reuse an
+  // expired signed URL.
+  const { data, error: downloadError } = await supabase.storage
+    .from(BUCKET)
+    .download(photo.storagePath);
+
+  if (downloadError) throw downloadError;
+
+  const thumbnail = await createThumbnailFromBlob(data);
+
+  if (!thumbnail) {
+    throw new Error(`Could not resize “${photo.title}” in this browser.`);
+  }
+
+  const extension = thumbnail.type === "image/png" ? "png" : "webp";
+  const thumbnailPath = `${userId}/thumbs/${photo.id}.${extension}`;
+
+  const { error: uploadError } = await supabase.storage
+    .from(BUCKET)
+    .upload(thumbnailPath, thumbnail, {
+      cacheControl: "3600",
+      contentType: thumbnail.type,
+      upsert: true,
+    });
+
+  if (uploadError) throw uploadError;
+
+  try {
+    return await updatePhotoThumbnail(photo.id, thumbnailPath);
+  } catch (error) {
+    // Do not leave an orphaned thumbnail if the row could not be updated.
+    await supabase.storage.from(BUCKET).remove([thumbnailPath]);
+    throw error;
+  }
 }

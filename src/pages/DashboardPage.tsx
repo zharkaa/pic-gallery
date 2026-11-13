@@ -5,7 +5,9 @@ import { Navigate } from "react-router";
 import { DashboardSidebar, type DashboardView } from "@/components/dashboard-sidebar";
 import { PhotoUploadForm } from "@/components/photo-upload-form";
 import { UploadedPhotosList } from "@/components/uploaded-photos-list";
-import { fetchMyPhotos, type Photo } from "@/data/photos";
+import { Button } from "@/components/ui/button";
+import { toast } from "@/components/ui/toast-manager";
+import { fetchMyPhotos, optimizePhotoThumbnail, type Photo } from "@/data/photos";
 import { useSession } from "@/hooks/use-session";
 
 type UploadsResult = {
@@ -22,6 +24,13 @@ export default function DashboardPage() {
   const [uploadsVersion, setUploadsVersion] = useState(0);
   const [attempt, setAttempt] = useState(0);
   const [uploads, setUploads] = useState<UploadsResult | null>(null);
+
+  // One-time backfill for photos uploaded before thumbnails existed.
+  const [isOptimizing, setIsOptimizing] = useState(false);
+  const [optimizeProgress, setOptimizeProgress] = useState<{ done: number; total: number } | null>(
+    null,
+  );
+  const [optimizeError, setOptimizeError] = useState<string | null>(null);
 
   const userId = user?.id ?? null;
   const uploadsKey = `${uploadsVersion}:${attempt}`;
@@ -52,6 +61,7 @@ export default function DashboardPage() {
   }, [uploadsKey, userId]);
 
   const currentUploads = uploads?.key === uploadsKey ? uploads : null;
+  const photosToOptimize = (currentUploads?.photos ?? []).filter((photo) => !photo.thumbnailPath);
 
   function handlePhotoUpdated(updatedPhoto: Photo) {
     setUploads((current) => {
@@ -74,6 +84,48 @@ export default function DashboardPage() {
     });
   }
 
+  async function handleOptimizePhotos() {
+    if (!user || isOptimizing) return;
+
+    const targets = photosToOptimize;
+    if (targets.length === 0) return;
+
+    setIsOptimizing(true);
+    setOptimizeError(null);
+    setOptimizeProgress({ done: 0, total: targets.length });
+
+    let optimized = 0;
+    let failed = 0;
+    let firstError: string | null = null;
+
+    for (const photo of targets) {
+      try {
+        const updated = await optimizePhotoThumbnail(photo, user.id);
+        handlePhotoUpdated(updated);
+        optimized += 1;
+      } catch (error) {
+        failed += 1;
+        firstError ??= error instanceof Error ? error.message : "Could not optimize a photo.";
+      } finally {
+        setOptimizeProgress((current) =>
+          current ? { done: current.done + 1, total: current.total } : current,
+        );
+      }
+    }
+
+    setIsOptimizing(false);
+    setOptimizeProgress(null);
+    setOptimizeError(firstError);
+
+    toast.add({
+      title: "Image optimization finished",
+      description:
+        failed > 0
+          ? `${optimized} optimized, ${failed} could not be processed.`
+          : `${optimized} photo${optimized === 1 ? "" : "s"} optimized.`,
+      type: failed > 0 ? "error" : "success",
+    });
+  }
 
   if (status === "loading") {
     return (
@@ -100,6 +152,41 @@ export default function DashboardPage() {
         />
 
         <div className="order-first flex min-w-0 flex-col gap-6 lg:order-none">
+          {(isOptimizing || photosToOptimize.length > 0) && (
+            <div className="flex flex-col gap-3 rounded-xl border bg-muted/30 p-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex flex-col gap-1">
+                <p className="text-sm font-medium">
+                  {isOptimizing
+                    ? `Optimizing images… ${optimizeProgress?.done ?? 0}/${optimizeProgress?.total ?? 0}`
+                    : `${photosToOptimize.length} photo${photosToOptimize.length === 1 ? "" : "s"} still load at full size`}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {isOptimizing
+                    ? "Keep this tab open while thumbnails are generated."
+                    : "Generate small grid thumbnails so the gallery opens faster."}
+                </p>
+                {optimizeError && !isOptimizing && (
+                  <p className="text-xs text-destructive">{optimizeError}</p>
+                )}
+              </div>
+              <Button
+                type="button"
+                onClick={handleOptimizePhotos}
+                disabled={isOptimizing}
+                className="shrink-0"
+              >
+                {isOptimizing ? (
+                  <>
+                    <Loader2 className="animate-spin" />
+                    Optimizing…
+                  </>
+                ) : (
+                  "Optimize images"
+                )}
+              </Button>
+            </div>
+          )}
+
           {view === "upload" ? (
             <>
               <div className="flex flex-col gap-1">

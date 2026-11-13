@@ -17,6 +17,7 @@ import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/c
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import { prepareUpload } from "@/lib/image-processing";
 import { supabase } from "@/utils/supabase";
 
 // Matches the `photos` storage bucket limits in supabase/migrations.
@@ -184,48 +185,68 @@ export function PhotoUploadForm({ className, userId, onSaved }: PhotoUploadFormP
     setSaved(false);
     setSubmitError(null);
 
-    const extension = EXTENSIONS[selectedFile.type] ?? "jpg";
-    // Storage RLS only allows the user to write inside their own folder.
-    const storagePath = `${userId}/${crypto.randomUUID()}.${extension}`;
+    try {
+      // Re-encode large files and create a small grid thumbnail in the browser.
+      const { original, thumbnail } = await prepareUpload(selectedFile);
 
-    // 1. Upload the image bytes to the private `photos` bucket.
-    const { error: uploadError } = await supabase.storage
-      .from("photos")
-      .upload(storagePath, selectedFile, {
-        cacheControl: "300",
-        contentType: selectedFile.type,
-        upsert: false,
+      const id = crypto.randomUUID();
+      // Storage RLS only allows the user to write inside their own folder.
+      const storagePath = `${userId}/${id}.${EXTENSIONS[original.type] ?? "jpg"}`;
+      const thumbnailExtension = thumbnail?.type === "image/png" ? "png" : "webp";
+      let thumbnailPath = thumbnail ? `${userId}/thumbs/${id}.${thumbnailExtension}` : null;
+
+      // 1. Upload the image bytes to the private `photos` bucket.
+      const { error: uploadError } = await supabase.storage
+        .from("photos")
+        .upload(storagePath, original, {
+          cacheControl: "3600",
+          contentType: original.type,
+          upsert: false,
+        });
+
+      if (uploadError) throw uploadError;
+
+      if (thumbnail && thumbnailPath) {
+        const { error: thumbnailError } = await supabase.storage
+          .from("photos")
+          .upload(thumbnailPath, thumbnail, {
+            cacheControl: "3600",
+            contentType: thumbnail.type,
+            upsert: false,
+          });
+
+        // A missing thumbnail only costs speed; the original still works.
+        if (thumbnailError) thumbnailPath = null;
+      }
+
+      // 2. Insert the metadata row that points at the uploaded objects.
+      const { error: insertError } = await supabase.from("photos").insert({
+        title: title.trim(),
+        description: description.trim(),
+        storage_path: storagePath,
+        thumbnail_path: thumbnailPath,
+        tags: nextTags,
+        date_taken: dateTaken || null,
+        published,
+        owner_id: userId,
       });
 
-    if (uploadError) {
-      setSubmitError(uploadError.message);
+      if (insertError) {
+        // Don't leave orphaned files behind if the row could not be created.
+        await supabase.storage
+          .from("photos")
+          .remove([storagePath, ...(thumbnailPath ? [thumbnailPath] : [])]);
+        throw insertError;
+      }
+
+      clearForm();
+      setSaved(true);
+      onSaved?.();
+    } catch (error) {
+      setSubmitError(error instanceof Error ? error.message : "Could not save the photo.");
+    } finally {
       setIsSaving(false);
-      return;
     }
-
-    // 2. Insert the metadata row that points at the uploaded object.
-    const { error: insertError } = await supabase.from("photos").insert({
-      title: title.trim(),
-      description: description.trim(),
-      storage_path: storagePath,
-      tags: nextTags,
-      date_taken: dateTaken || null,
-      published,
-      owner_id: userId,
-    });
-
-    if (insertError) {
-      // Don't leave an orphaned file behind if the row could not be created.
-      await supabase.storage.from("photos").remove([storagePath]);
-      setSubmitError(insertError.message);
-      setIsSaving(false);
-      return;
-    }
-
-    setIsSaving(false);
-    clearForm();
-    setSaved(true);
-    onSaved?.();
   }
 
   return (
