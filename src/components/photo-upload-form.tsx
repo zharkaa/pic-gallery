@@ -62,11 +62,13 @@ function todayAsInputValue() {
 
 type PhotoUploadFormProps = {
   className?: string;
+  /** Owner of the new photo; also scopes the storage path under their folder. */
+  userId: string;
   /** Called after a photo is uploaded and its metadata row is saved. */
   onSaved?: () => void;
 };
 
-export function PhotoUploadForm({ className, onSaved }: PhotoUploadFormProps) {
+export function PhotoUploadForm({ className, userId, onSaved }: PhotoUploadFormProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [file, setFile] = useState<File | null>(null);
@@ -183,13 +185,14 @@ export function PhotoUploadForm({ className, onSaved }: PhotoUploadFormProps) {
     setSubmitError(null);
 
     const extension = EXTENSIONS[selectedFile.type] ?? "jpg";
-    const storagePath = `${crypto.randomUUID()}.${extension}`;
+    // Storage RLS only allows the user to write inside their own folder.
+    const storagePath = `${userId}/${crypto.randomUUID()}.${extension}`;
 
-    // 1. Upload the image bytes to the public `photos` bucket.
+    // 1. Upload the image bytes to the private `photos` bucket.
     const { error: uploadError } = await supabase.storage
       .from("photos")
       .upload(storagePath, selectedFile, {
-        cacheControl: "3600",
+        cacheControl: "300",
         contentType: selectedFile.type,
         upsert: false,
       });
@@ -208,6 +211,7 @@ export function PhotoUploadForm({ className, onSaved }: PhotoUploadFormProps) {
       tags: nextTags,
       date_taken: dateTaken || null,
       published,
+      owner_id: userId,
     });
 
     if (insertError) {

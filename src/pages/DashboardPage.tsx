@@ -5,7 +5,7 @@ import { Navigate } from "react-router";
 import { DashboardSidebar, type DashboardView } from "@/components/dashboard-sidebar";
 import { PhotoUploadForm } from "@/components/photo-upload-form";
 import { UploadedPhotosList } from "@/components/uploaded-photos-list";
-import { fetchAllPhotos, type Photo } from "@/data/photos";
+import { fetchMyPhotos, type Photo } from "@/data/photos";
 import { useSession } from "@/hooks/use-session";
 
 type UploadsResult = {
@@ -15,20 +15,24 @@ type UploadsResult = {
 };
 
 export default function DashboardPage() {
-  const { status } = useSession();
+  const { status, user } = useSession();
   const [view, setView] = useState<DashboardView>("upload");
 
-  // Every photo, including drafts, powers both the sidebar count and the list.
+  // The signed-in user's photos, including drafts, power the sidebar count and list.
   const [uploadsVersion, setUploadsVersion] = useState(0);
   const [attempt, setAttempt] = useState(0);
   const [uploads, setUploads] = useState<UploadsResult | null>(null);
 
+  const userId = user?.id ?? null;
   const uploadsKey = `${uploadsVersion}:${attempt}`;
 
   useEffect(() => {
+    // The page redirects without a user; skip the request until the session is ready.
+    if (!userId) return;
+
     let active = true;
 
-    fetchAllPhotos()
+    fetchMyPhotos(userId)
       .then((photos) => {
         if (!active) return;
         setUploads({ key: uploadsKey, photos, error: null });
@@ -45,7 +49,7 @@ export default function DashboardPage() {
     return () => {
       active = false;
     };
-  }, [uploadsKey]);
+  }, [uploadsKey, userId]);
 
   const currentUploads = uploads?.key === uploadsKey ? uploads : null;
 
@@ -82,7 +86,7 @@ export default function DashboardPage() {
 
   // Uploading is limited to signed-in users by the database policies, so send
   // everyone else to the login page first.
-  if (status === "signed-out") {
+  if (status === "signed-out" || !user) {
     return <Navigate to="/login" replace />;
   }
 
@@ -105,7 +109,10 @@ export default function DashboardPage() {
                 </p>
               </div>
 
-              <PhotoUploadForm onSaved={() => setUploadsVersion((value) => value + 1)} />
+              <PhotoUploadForm
+                userId={user.id}
+                onSaved={() => setUploadsVersion((value) => value + 1)}
+              />
             </>
           ) : (
             <>

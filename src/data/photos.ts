@@ -2,6 +2,18 @@ import { supabase } from "@/utils/supabase";
 
 const BUCKET = "photos";
 
+// The bucket is private, so every render needs a short-lived signed URL.
+const SIGNED_URL_TTL_SECONDS = 60 * 60;
+
+// Reuse signed URLs until shortly before they expire. Visibility is still
+// enforced by the row query, so caching by storage path does not leak drafts.
+const SIGNED_URL_CACHE_MS = (SIGNED_URL_TTL_SECONDS - 60) * 1000;
+const signedUrlCache = new Map<string, { url: string; expiresAt: number }>();
+
+// Shown only if a row points at a missing object; keeps `<img src>` valid.
+const MISSING_IMAGE_SRC =
+  "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='1' height='1'/%3E";
+
 export type Photo = {
   id: string;
   title: string;
@@ -10,8 +22,9 @@ export type Photo = {
   tags: string[];
   dateTaken: string | null;
   published: boolean;
+  ownerId: string;
   createdAt: string;
-  /** Public URL of the image inside the `photos` storage bucket. */
+  /** Short-lived signed URL of the image inside the private `photos` bucket. */
   src: string;
 };
 
@@ -23,10 +36,11 @@ type PhotoRow = {
   tags: string[] | null;
   date_taken: string | null;
   published: boolean;
+  owner_id: string;
   created_at: string;
 };
 
-function toPhoto(row: PhotoRow): Photo {
+function toPhoto(row: PhotoRow, src: string): Photo {
   return {
     id: row.id,
     title: row.title,
@@ -35,9 +49,54 @@ function toPhoto(row: PhotoRow): Photo {
     tags: row.tags ?? [],
     dateTaken: row.date_taken,
     published: row.published,
+    ownerId: row.owner_id,
     createdAt: row.created_at,
-    src: supabase.storage.from(BUCKET).getPublicUrl(row.storage_path).data.publicUrl,
+    src,
   };
+}
+
+/** Resolve signed URLs for a batch of rows, reusing cached URLs when possible. */
+async function withSignedUrls(rows: PhotoRow[]): Promise<Photo[]> {
+  if (rows.length === 0) return [];
+
+  const now = Date.now();
+  const signedUrls = new Map<string, string>();
+  const pathsToSign = new Set<string>();
+
+  for (const row of rows) {
+    const cached = signedUrlCache.get(row.storage_path);
+
+    if (cached && cached.expiresAt > now) {
+      signedUrls.set(row.storage_path, cached.url);
+    } else {
+      if (cached) signedUrlCache.delete(row.storage_path);
+      pathsToSign.add(row.storage_path);
+    }
+  }
+
+  if (pathsToSign.size > 0) {
+    const { data, error } = await supabase.storage
+      .from(BUCKET)
+      .createSignedUrls([...pathsToSign], SIGNED_URL_TTL_SECONDS);
+
+    if (error) throw error;
+
+    const expiresAt = Date.now() + SIGNED_URL_CACHE_MS;
+
+    for (const item of data ?? []) {
+      if (!item.path || !item.signedUrl) continue;
+
+      signedUrls.set(item.path, item.signedUrl);
+      signedUrlCache.set(item.path, { url: item.signedUrl, expiresAt });
+    }
+  }
+
+  return rows.map((row) => toPhoto(row, signedUrls.get(row.storage_path) ?? MISSING_IMAGE_SRC));
+}
+
+async function rowToPhoto(row: PhotoRow): Promise<Photo> {
+  const [photo] = await withSignedUrls([row]);
+  return photo;
 }
 
 /** Published photos, newest first, for the home gallery. */
@@ -50,25 +109,32 @@ export async function fetchPhotos(): Promise<Photo[]> {
 
   if (error) throw error;
 
-  return (data ?? []).map((row) => toPhoto(row as PhotoRow));
+  return withSignedUrls((data ?? []) as PhotoRow[]);
 }
 
-/** Every photo, newest first, including drafts hidden from the gallery. */
-export async function fetchAllPhotos(): Promise<Photo[]> {
-  const { data, error } = await supabase.from("photos").select("*").order("created_at", { ascending: false });
+/** The signed-in user's photos, newest first, including their drafts. */
+export async function fetchMyPhotos(userId: string): Promise<Photo[]> {
+  const { data, error } = await supabase
+    .from("photos")
+    .select("*")
+    .eq("owner_id", userId)
+    .order("created_at", { ascending: false });
 
   if (error) throw error;
 
-  return (data ?? []).map((row) => toPhoto(row as PhotoRow));
+  return withSignedUrls((data ?? []) as PhotoRow[]);
 }
 
-/** Fetch one photo by id, including drafts (a direct link should still work). */
+/**
+ * Fetch one photo by id. RLS limits anonymous visitors to published photos,
+ * while the owner can still open a direct link to a draft.
+ */
 export async function fetchPhotoById(id: string): Promise<Photo | null> {
   const { data, error } = await supabase.from("photos").select("*").eq("id", id).maybeSingle();
 
   if (error) throw error;
 
-  return data ? toPhoto(data as PhotoRow) : null;
+  return data ? rowToPhoto(data as PhotoRow) : null;
 }
 
 /** Show or hide a photo in the public gallery. */
@@ -82,18 +148,22 @@ export async function updatePhotoPublished(id: string, published: boolean): Prom
 
   if (error) throw error;
 
-  return toPhoto(data as PhotoRow);
+  return rowToPhoto(data as PhotoRow);
 }
 
-/** Permanently delete a photo's metadata row and its image file. */
+/** Permanently delete a photo's image file and its metadata row. */
 export async function deletePhoto(photo: Photo): Promise<void> {
+  // Remove the file first. If cleanup fails, the row still exists and the
+  // caller can retry instead of leaving an orphaned object behind.
+  const { error: storageError } = await supabase.storage
+    .from(BUCKET)
+    .remove([photo.storagePath]);
+
+  if (storageError) throw storageError;
+
   const { error } = await supabase.from("photos").delete().eq("id", photo.id);
 
   if (error) throw error;
-
-  // The row is already gone, so a failed file cleanup shouldn't make the UI
-  // report the photo as still existing. Supabase removes the object best-effort.
-  await supabase.storage.from(BUCKET).remove([photo.storagePath]);
 }
 
 export type PhotoDetails = {
@@ -119,5 +189,5 @@ export async function updatePhotoDetails(id: string, details: PhotoDetails): Pro
 
   if (error) throw error;
 
-  return toPhoto(data as PhotoRow);
+  return rowToPhoto(data as PhotoRow);
 }

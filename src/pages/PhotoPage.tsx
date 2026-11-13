@@ -31,7 +31,7 @@ function formatDateTaken(value: string) {
 
 export default function PhotoPage() {
   const { id } = useParams();
-  const { status } = useSession();
+  const { user } = useSession();
 
   const [attempt, setAttempt] = useState(0);
   const [result, setResult] = useState<PhotoResult | null>(null);
@@ -140,8 +140,8 @@ export default function PhotoPage() {
     // Locked to the space below the navbar so the page itself never scrolls.
     // Mobile stacks image/details; desktop splits them side by side.
     <div className="relative grid h-[calc(100svh-4rem-1px)] grid-cols-1 grid-rows-[minmax(0,1.5fr)_minmax(0,1fr)] overflow-hidden md:grid-cols-2 md:grid-rows-1">
-      {/* Edit lives in the top corner and only appears for signed-in users. */}
-      {status === "signed-in" && (
+      {/* Edit lives in the top corner and only appears for the photo's owner. */}
+      {user?.id === photo.ownerId && (
         <div className="absolute top-4 right-4 z-10">
           <EditPhotoDialog photo={photo} onUpdated={handleUpdated} />
         </div>
