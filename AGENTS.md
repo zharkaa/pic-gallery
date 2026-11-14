@@ -1,3 +1,6 @@
+# INFORMATION
+The project is already deployed, so any changes have to have this information in mind.
+
 # Instruction
 1. Use 'bun' as the default runtime
 2. the 'env' mostly used for DB and storage no need to read it unless necessary
