@@ -8,65 +8,7 @@ hardening · **Low** = hygiene.
 
 ---
 
-## 1. High-priority hardening
-
-### 1.1 Upload validation is client-side only
-
-`src/components/photo-upload-form.tsx` checks `file.type` and `file.size` in the browser. The
-bucket's `allowed_mime_types` / `file_size_limit` help, but the MIME type is a client-supplied
-header and can be spoofed. Content sniffing or an HTML payload labelled `image/png` is not
-validated anywhere.
-
-**Fix:** validate magic bytes and decode the image server-side (Edge Function or a
-`storage` trigger), re-encode to strip metadata, and reject images above a pixel-dimension cap
-(a small 10 MB file can decode into a memory-exhausting bitmap). Keep the client checks for UX
-only.
-
-### 1.2 EXIF metadata leaks location and device data
-
-JPEG uploads often carry GPS coordinates, camera serial numbers, and timestamps. These are
-published with the file.
-
-**Fix:** strip EXIF on upload (canvas/`createImageBitmap` re-encode, or server-side transform) and
-keep only the fields the gallery actually uses.
-
-### 1.3 No quotas or abuse limits
-
-Any signed-in user can upload unlimited 10 MB objects, which turns the project into free image
-hosting and can exhaust storage/egress quota.
-
-**Fix:** enforce a per-user object/byte quota (DB counter + trigger or Edge Function), and add a
-small upload rate limit.
-
-### 1.4 No database-side input constraints
-
-`title`, `description`, and `tags` are unbounded `text`/`text[]`, and the UI has no `maxLength`.
-A signed-in user can insert megabytes of text per row.
-
-```sql
-alter table public.photos
-  add constraint photos_title_len check (char_length(btrim(title)) between 1 and 200),
-  add constraint photos_description_len check (char_length(description) <= 5000),
-  add constraint photos_tags_len check (cardinality(tags) <= 20),
-  add constraint photos_storage_path_shape check (
-    storage_path ~ '^([0-9a-f-]{36}/)?[0-9a-f-]{36}\.(jpg|png|webp|avif|gif)$'
-  );
-```
-
-Also validate `date_taken` server-side (`date_taken <= current_date`) — currently only the date
-picker enforces it.
-
-### 1.5 Raw Supabase errors are shown to users
-
-`login-form.tsx`, `photo-upload-form.tsx`, `dashboard`, `photo page` print `error.message`
-verbatim, which can expose table names, policy names, and constraint details.
-
-**Fix:** map known cases to friendly copy, log the real error to a monitoring sink
-(Sentry/console in dev), and never echo storage/database internals into the UI.
-
----
-
-## 2. Authentication and session hardening
+## 1. Authentication and session hardening
 
 - **Email confirmation is off** (`supabase/config.toml` line 230). Sign-up is disabled locally, but
   keep confirmations on for any manually created account (and disable sign-up in the hosted
@@ -90,7 +32,7 @@ verbatim, which can expose table names, policy names, and constraint details.
 
 ---
 
-## 3. Web / deployment security
+## 2. Web / deployment security
 
 - **No Content-Security-Policy or security headers.** `index.html` has none, and `vite preview`
   adds none. Add them at the host (Netlify `_headers`, Vercel `vercel.json`, Cloudflare, nginx) or
@@ -119,7 +61,7 @@ verbatim, which can expose table names, policy names, and constraint details.
 
 ---
 
-## 4. Dependencies, repo hygiene, and monitoring
+## 3. Dependencies, repo hygiene, and monitoring
 
 - **No dependency scanning:** run `bun audit` (or `npm audit`) in CI and enable Dependabot.
 - **CLI packages in `dependencies`:** `supabase`, `shadcn`, and `bunx` are build-time tools;
@@ -138,7 +80,7 @@ verbatim, which can expose table names, policy names, and constraint details.
 
 ---
 
-## 5. Non-security improvements
+## 4. Non-security improvements
 
 **Code quality**
 
@@ -149,7 +91,7 @@ verbatim, which can expose table names, policy names, and constraint details.
   responses. A query library (TanStack Query) would remove this boilerplate and add caching,
   retries, and cache invalidation after upload/edit/delete.
 - Unify date formatting (`formatDateTaken` vs `formatCreatedAt`) into `src/lib/date.ts`.
-- Centralize auth in a `SessionProvider` (see §2) and add a `ProtectedRoute` wrapper instead of
+- Centralize auth in a `SessionProvider` (see §1) and add a `ProtectedRoute` wrapper instead of
   per-page `Navigate` checks.
 - Add an error boundary and a `*` route so unknown URLs show a proper 404 page.
 
@@ -178,7 +120,6 @@ verbatim, which can expose table names, policy names, and constraint details.
 
 ## Suggested order of work
 
-1. Add DB constraints and server-side image validation/EXIF stripping (§1.1–1.4).
-2. Harden auth (confirmations, password policy, MFA, reset flow) and hide raw errors (§1.5, §2).
-3. Add CSP/security headers at the host and dependency scanning to CI (§3, §4).
-4. Clean up duplication, add tests/CI, then work through §5.
+1. Harden auth (confirmations, password policy, MFA, reset flow) (§1).
+2. Add CSP/security headers at the host and dependency scanning to CI (§2, §3).
+3. Clean up duplication, add tests/CI, then work through §4.
