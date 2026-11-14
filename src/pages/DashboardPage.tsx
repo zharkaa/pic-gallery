@@ -8,6 +8,7 @@ import { UploadedPhotosList } from "@/components/uploaded-photos-list";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/toast-manager";
 import { fetchMyPhotos, optimizePhotoThumbnail, type Photo } from "@/data/photos";
+import { logError, toFriendlyMessage } from "@/lib/errors";
 import { useSession } from "@/hooks/use-session";
 
 type UploadsResult = {
@@ -41,19 +42,21 @@ export default function DashboardPage() {
 
     let active = true;
 
-    fetchMyPhotos(userId)
-      .then((photos) => {
+    void (async () => {
+      try {
+        const photos = await fetchMyPhotos(userId);
         if (!active) return;
         setUploads({ key: uploadsKey, photos, error: null });
-      })
-      .catch((loadError: unknown) => {
+      } catch (error) {
+        logError("load uploads", error);
+        const message = await toFriendlyMessage(
+          error,
+          "Could not load your uploads. Please try again.",
+        );
         if (!active) return;
-        setUploads({
-          key: uploadsKey,
-          photos: [],
-          error: loadError instanceof Error ? loadError.message : "Could not load your uploads.",
-        });
-      });
+        setUploads({ key: uploadsKey, photos: [], error: message });
+      }
+    })();
 
     return () => {
       active = false;
@@ -100,12 +103,13 @@ export default function DashboardPage() {
 
     for (const photo of targets) {
       try {
-        const updated = await optimizePhotoThumbnail(photo, user.id);
+        const updated = await optimizePhotoThumbnail(photo);
         handlePhotoUpdated(updated);
         optimized += 1;
       } catch (error) {
         failed += 1;
-        firstError ??= error instanceof Error ? error.message : "Could not optimize a photo.";
+        logError("optimize photo thumbnail", error);
+        firstError ??= await toFriendlyMessage(error, "Could not optimize a photo.");
       } finally {
         setOptimizeProgress((current) =>
           current ? { done: current.done + 1, total: current.total } : current,
@@ -196,10 +200,7 @@ export default function DashboardPage() {
                 </p>
               </div>
 
-              <PhotoUploadForm
-                userId={user.id}
-                onSaved={() => setUploadsVersion((value) => value + 1)}
-              />
+              <PhotoUploadForm onSaved={() => setUploadsVersion((value) => value + 1)} />
             </>
           ) : (
             <>

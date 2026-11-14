@@ -1,7 +1,9 @@
 import { createThumbnailFromBlob } from "@/lib/image-processing";
+import { UserVisibleError } from "@/lib/errors";
 import { supabase } from "@/utils/supabase";
 
 const BUCKET = "photos";
+const UPLOAD_FUNCTION = "upload-photo";
 
 // The bucket is private, so every render needs a short-lived signed URL.
 const SIGNED_URL_TTL_SECONDS = 60 * 60;
@@ -221,25 +223,74 @@ export async function updatePhotoDetails(id: string, details: PhotoDetails): Pro
   return rowToPhoto(data as PhotoRow);
 }
 
-/** Attach a generated thumbnail to an existing photo. */
-export async function updatePhotoThumbnail(id: string, thumbnailPath: string): Promise<Photo> {
-  const { data, error } = await supabase
-    .from("photos")
-    .update({ thumbnail_path: thumbnailPath })
-    .eq("id", id)
-    .select("*")
-    .single();
+export type NewPhoto = {
+  id: string;
+  title: string;
+  description: string;
+  dateTaken: string | null;
+  tags: string[];
+  published: boolean;
+};
 
+function assertPhotoResponse(data: unknown): PhotoRow {
+  if (typeof data === "object" && data !== null && "photo" in data) {
+    const photo = (data as { photo: unknown }).photo;
+    if (typeof photo === "object" && photo !== null) return photo as PhotoRow;
+  }
+
+  throw new UserVisibleError("The server did not confirm the upload. Please check your gallery.");
+}
+
+/**
+ * Send the prepared file to the `upload-photo` Edge Function. The function
+ * validates the bytes, enforces the quota/rate limit, and writes the objects
+ * and metadata row with the service role.
+ */
+export async function uploadPhoto(
+  file: File,
+  thumbnail: File | null,
+  photo: NewPhoto,
+): Promise<void> {
+  const body = new FormData();
+  body.set("mode", "upload");
+  body.set("id", photo.id);
+  body.set("file", file);
+  if (thumbnail) body.set("thumbnail", thumbnail);
+  body.set(
+    "metadata",
+    JSON.stringify({
+      title: photo.title,
+      description: photo.description,
+      dateTaken: photo.dateTaken,
+      tags: photo.tags,
+      published: photo.published,
+    }),
+  );
+
+  const { data, error } = await supabase.functions.invoke(UPLOAD_FUNCTION, { body });
   if (error) throw error;
 
-  return rowToPhoto(data as PhotoRow);
+  assertPhotoResponse(data);
+}
+
+/** Upload a generated thumbnail for an existing owned photo. */
+async function uploadThumbnail(photoId: string, thumbnail: File): Promise<Photo> {
+  const body = new FormData();
+  body.set("mode", "thumbnail");
+  body.set("photoId", photoId);
+  body.set("thumbnail", thumbnail);
+
+  const { data, error } = await supabase.functions.invoke(UPLOAD_FUNCTION, { body });
+  if (error) throw error;
+
+  return rowToPhoto(assertPhotoResponse(data));
 }
 
 /**
  * Generate a thumbnail for an existing photo and store it in the owner's
  * folder. Used by the dashboard backfill for photos uploaded before thumbnails.
  */
-export async function optimizePhotoThumbnail(photo: Photo, userId: string): Promise<Photo> {
+export async function optimizePhotoThumbnail(photo: Photo): Promise<Photo> {
   // Download with the current session so a long backfill cannot reuse an
   // expired signed URL.
   const { data, error: downloadError } = await supabase.storage
@@ -251,27 +302,10 @@ export async function optimizePhotoThumbnail(photo: Photo, userId: string): Prom
   const thumbnail = await createThumbnailFromBlob(data);
 
   if (!thumbnail) {
-    throw new Error(`Could not resize “${photo.title}” in this browser.`);
+    throw new UserVisibleError(
+      `We could not resize “${photo.title}” in this browser. Try a different photo.`,
+    );
   }
 
-  const extension = thumbnail.type === "image/png" ? "png" : "webp";
-  const thumbnailPath = `${userId}/thumbs/${photo.id}.${extension}`;
-
-  const { error: uploadError } = await supabase.storage
-    .from(BUCKET)
-    .upload(thumbnailPath, thumbnail, {
-      cacheControl: "3600",
-      contentType: thumbnail.type,
-      upsert: true,
-    });
-
-  if (uploadError) throw uploadError;
-
-  try {
-    return await updatePhotoThumbnail(photo.id, thumbnailPath);
-  } catch (error) {
-    // Do not leave an orphaned thumbnail if the row could not be updated.
-    await supabase.storage.from(BUCKET).remove([thumbnailPath]);
-    throw error;
-  }
+  return uploadThumbnail(photo.id, thumbnail);
 }

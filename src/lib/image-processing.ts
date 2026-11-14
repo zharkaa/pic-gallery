@@ -1,19 +1,40 @@
 // Browser-side image preparation for the private `photos` bucket.
 //
-// Re-encoding through a canvas also strips EXIF metadata (GPS, device, etc.)
-// and lets the gallery serve small thumbnails without a paid image service.
+// Re-encoding through a canvas is what strips EXIF/GPS/device metadata: the
+// browser decodes the pixels and writes a fresh file. Animated GIFs are kept
+// as-is (re-encoding would drop the animation), and the upload Edge Function
+// rejects GIFs that still contain comment/XMP blocks.
+//
+// This is a UX/performance step only. The Edge Function validates everything
+// again on the server, so a modified client cannot bypass it.
+
+import { UserVisibleError } from "@/lib/errors";
 
 const THUMBNAIL_MAX_EDGE = 800;
 const THUMBNAIL_QUALITY = 0.75;
 
 const ORIGINAL_MAX_EDGE = 2560;
 const ORIGINAL_QUALITY = 0.85;
-const ORIGINAL_RECOMPRESS_THRESHOLD = 2 * 1024 * 1024;
+
+// Mirrors the server cap in supabase/functions/upload-photo/index.ts, except for
+// the pixel ceiling: the browser has to decode the whole image into memory, so
+// 30 MP is as much as a phone tab can hold. The server's 50 MP limit only guards
+// a header parse, so it can stay higher.
+const MAX_PIXELS = 30_000_000;
+const MAX_EDGE = 8192;
 
 export type PreparedUpload = {
   original: File;
   thumbnail: File | null;
 };
+
+/** A problem with the selected file; the message is safe to show to the user. */
+export class ImageProcessingError extends UserVisibleError {
+  constructor(message: string) {
+    super(message);
+    this.name = "ImageProcessingError";
+  }
+}
 
 const EXTENSION_BY_TYPE: Record<string, string> = {
   "image/jpeg": "jpg",
@@ -52,6 +73,12 @@ function encodeCanvas(
   const context = canvas.getContext("2d");
   if (!context) return Promise.reject(new Error("Canvas is not available."));
 
+  // A white matte prevents transparent PNGs from turning black in JPEG.
+  if (type !== "image/webp" && type !== "image/png" && type !== "image/avif") {
+    context.fillStyle = "#ffffff";
+    context.fillRect(0, 0, width, height);
+  }
+
   context.drawImage(bitmap, 0, 0, width, height);
 
   return new Promise((resolve, reject) => {
@@ -69,46 +96,58 @@ async function makeThumbnail(bitmap: ImageBitmap): Promise<File | null> {
     const type = blob.type || "image/webp";
     return new File([blob], `thumbnail.${extensionFor(type)}`, { type });
   } catch {
-    // Some browsers cannot decode/encode a format; keep the original only.
+    // Some browsers cannot encode a format; the original still uploads.
     return null;
   }
 }
 
+async function decode(file: Blob) {
+  try {
+    return await createImageBitmap(file, { imageOrientation: "from-image" });
+  } catch {
+    throw new ImageProcessingError(
+      "We could not read that image. Try a JPEG, PNG, WebP, or GIF.",
+    );
+  }
+}
+
 /**
- * Decode once, then return a web-friendly original (when it is large) and a
- * small grid thumbnail. Both fall back to the untouched input on failure.
+ * Decode once, then always re-encode the photo (stripping metadata) and return
+ * a small grid thumbnail. Animated GIFs stay untouched so they keep animating.
  */
 export async function prepareUpload(file: File): Promise<PreparedUpload> {
-  let bitmap: ImageBitmap;
+  const bitmap = await decode(file);
 
   try {
-    bitmap = await createImageBitmap(file, { imageOrientation: "from-image" });
-  } catch {
-    return { original: file, thumbnail: null };
-  }
-
-  try {
-    let original = file;
-    const longEdge = Math.max(bitmap.width, bitmap.height);
-
-    // Keep animated GIFs intact; the detail page should still animate.
     if (
-      file.type !== "image/gif" &&
-      (longEdge > ORIGINAL_MAX_EDGE || file.size > ORIGINAL_RECOMPRESS_THRESHOLD)
+      bitmap.width * bitmap.height > MAX_PIXELS ||
+      Math.max(bitmap.width, bitmap.height) > MAX_EDGE
     ) {
-      try {
-        const blob = await encodeCanvas(bitmap, ORIGINAL_MAX_EDGE, "image/webp", ORIGINAL_QUALITY);
-
-        if (blob.size < file.size) {
-          const type = blob.type || "image/webp";
-          original = new File([blob], `photo.${extensionFor(type)}`, { type });
-        }
-      } catch {
-        // Re-encoding is an optimization; the original is still uploadable.
-      }
+      throw new ImageProcessingError(
+        "That image is too large in pixels. Resize it and try again.",
+      );
     }
 
-    return { original, thumbnail: await makeThumbnail(bitmap) };
+    const thumbnail = await makeThumbnail(bitmap);
+
+    if (file.type === "image/gif") {
+      return { original: file, thumbnail };
+    }
+
+    let blob: Blob;
+    try {
+      blob = await encodeCanvas(bitmap, ORIGINAL_MAX_EDGE, "image/webp", ORIGINAL_QUALITY);
+    } catch {
+      throw new ImageProcessingError(
+        "We could not prepare that image. Try saving it as a JPEG and uploading again.",
+      );
+    }
+
+    const type = blob.type || "image/webp";
+    return {
+      original: new File([blob], `photo.${extensionFor(type)}`, { type }),
+      thumbnail,
+    };
   } finally {
     bitmap.close();
   }

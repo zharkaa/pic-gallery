@@ -7,6 +7,7 @@ import { SkeletonImage } from "@/components/skeleton-image";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { fetchPhotoById, type Photo } from "@/data/photos";
+import { logError, toFriendlyMessage } from "@/lib/errors";
 import { useSession } from "@/hooks/use-session";
 
 type LoadState = "loading" | "ready" | "not-found" | "error";
@@ -42,19 +43,21 @@ export default function PhotoPage() {
     let active = true;
     const requestKey = `${id}:${attempt}`;
 
-    fetchPhotoById(id)
-      .then((fetchedPhoto) => {
+    void (async () => {
+      try {
+        const fetchedPhoto = await fetchPhotoById(id);
         if (!active) return;
         setResult({ key: requestKey, photo: fetchedPhoto, error: null });
-      })
-      .catch((error: unknown) => {
+      } catch (error) {
+        logError("load photo", error);
+        const message = await toFriendlyMessage(
+          error,
+          "Could not load this photo. Please try again.",
+        );
         if (!active) return;
-        setResult({
-          key: requestKey,
-          photo: null,
-          error: error instanceof Error ? error.message : "Could not load this photo.",
-        });
-      });
+        setResult({ key: requestKey, photo: null, error: message });
+      }
+    })();
 
     return () => {
       active = false;

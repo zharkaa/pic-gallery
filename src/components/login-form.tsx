@@ -9,6 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { toast } from "@/components/ui/toast-manager";
+import { logError, toFriendlyMessage } from "@/lib/errors";
 import { supabase } from "@/utils/supabase";
 
 export function LoginForm({ className, ...props }: React.ComponentProps<"div">) {
@@ -34,11 +35,8 @@ export function LoginForm({ className, ...props }: React.ComponentProps<"div">) 
     });
 
     if (signInError) {
-      setError(
-        signInError.message === "Invalid login credentials"
-          ? "Incorrect email or password."
-          : signInError.message,
-      );
+      logError("sign in", signInError);
+      setError(await toFriendlyMessage(signInError, "Could not sign you in. Please try again."));
       setIsSubmitting(false);
       return;
     }

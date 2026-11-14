@@ -44,16 +44,74 @@ bunx supabase@latest db push                     # prompts for the database pass
 
 `supabase/seed.sql` is loaded by `supabase db reset` for local development.
 
+### Upload validation and limits
+
+Uploads go through the `supabase/functions/upload-photo` Edge Function. The
+browser re-encodes the image first (which strips EXIF/GPS metadata and caps it at
+2560 px), but the function is the security boundary:
+
+- it authenticates the caller and reads the format from the file's magic bytes,
+  not the declared `Content-Type`;
+- it rejects files with EXIF/XMP/IPTC/comment metadata, images above 50 MP or
+  8192 px per edge, and anything over 10 MB. The browser caps at 30 MP before
+  upload because it must hold the decoded image in memory; the server cap is
+  higher because the function only parses headers;
+- it enforces a per-user quota of **500 photos / 800 MB** and a limit of **20
+  uploads per hour**. A database trigger applies the same limits, so the quota
+  cannot be bypassed by writing to the table directly. 800 MB stays below the
+  Supabase Free plan's 1 GB project storage, so the friendly quota message fires
+  before storage itself refuses the write;
+- it writes the storage objects and metadata row with the service role. Client
+  roles can no longer insert into `public.photos`, and the storage bucket has no
+  client INSERT/UPDATE policy.
+
+The database also enforces `title` (1-200 chars), `description` (≤ 5000), `tags`
+(≤ 20 tags, each 1-50 chars), and `date_taken` (never in the future). The UI
+mirrors these limits for a better error message, but the database is the
+authority.
+
+Deploy the function whenever `supabase/functions/upload-photo` changes:
+
+```bash
+bunx supabase@latest functions deploy upload-photo
+```
+
+The function reads `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` from the Edge
+Function environment, which hosted projects provide automatically.
+
+**Deploy order matters** for a project that is already live:
+
+1. deploy the function (`functions deploy upload-photo`);
+2. push the migration (`db push`) — this closes the direct upload paths;
+3. deploy the updated frontend.
+
+If you push the migration first, the old frontend cannot upload until the new
+build is live.
+
+### Free-plan notes
+
+The project runs on Supabase Free and Vercel Hobby, so these are the real
+ceilings:
+
+- **Storage: 1 GB** per project (50 MB per file). The 800 MB per-user quota is
+  deliberately lower so uploads fail with a friendly message first.
+- **Egress: 5 GB uncached + 5 GB cached** per month. The gallery grid signs only
+  thumbnails; opening a photo downloads the full-size image.
+- **Edge Functions: 500k invocations** per month, 150 s wall clock. One
+  invocation per upload, and the client re-encode keeps the payload small.
+- **No backups.** Run `bunx supabase@latest db dump -f backup.sql` before
+  `db push`; the dump does not include the storage objects.
+- Free Supabase projects **pause after a week of inactivity**.
+- Vercel Hobby is restricted to **non-commercial personal use**.
+
 ```ts
 import { supabase } from "@/utils/supabase";
 
-// Database
+// Database (reads, edits, and deletes go through the owner-scoped policies)
 const { data, error } = await supabase.from("photos").select();
 
-// Storage
-const { data: file } = await supabase.storage
-  .from("photos")
-  .upload("example.jpg", file);
+// Uploads must use `uploadPhoto()` in `src/data/photos.ts`, which calls the
+// `upload-photo` Edge Function. Direct storage uploads are blocked by RLS.
 ```
 
 

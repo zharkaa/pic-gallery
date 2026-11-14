@@ -23,6 +23,7 @@ import {
 import { toast } from "@/components/ui/toast-manager";
 import { Skeleton } from "@/components/ui/skeleton";
 import { deletePhoto, updatePhotoPublished, type Photo } from "@/data/photos";
+import { logError, toFriendlyMessage } from "@/lib/errors";
 
 type UploadedPhotosListProps = {
   photos: Photo[];
@@ -73,10 +74,10 @@ function UploadedPhotoCard({ photo, onPhotoUpdated, onPhotoDeleted }: UploadedPh
         type: "success",
       });
     } catch (updateError) {
+      logError("publish photo", updateError);
       toast.add({
         title: "Could not update the photo",
-        description:
-          updateError instanceof Error ? updateError.message : "Please try again.",
+        description: await toFriendlyMessage(updateError, "Please try again."),
         type: "error",
       });
     } finally {
@@ -99,9 +100,10 @@ function UploadedPhotoCard({ photo, onPhotoUpdated, onPhotoDeleted }: UploadedPh
         type: "success",
       });
     } catch (deleteError) {
+      logError("delete photo", deleteError);
       toast.add({
         title: "Could not delete the photo",
-        description: deleteError instanceof Error ? deleteError.message : "Please try again.",
+        description: await toFriendlyMessage(deleteError, "Please try again."),
         type: "error",
       });
     } finally {

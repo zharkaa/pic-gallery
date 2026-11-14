@@ -24,6 +24,13 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/components/ui/toast-manager";
 import { updatePhotoDetails, type Photo } from "@/data/photos";
+import { logError, toFriendlyMessage } from "@/lib/errors";
+import {
+  PHOTO_DESCRIPTION_MAX_LENGTH,
+  PHOTO_TAG_MAX_LENGTH,
+  PHOTO_TAGS_MAX,
+  PHOTO_TITLE_MAX_LENGTH,
+} from "@/lib/photo-limits";
 
 type EditPhotoDialogProps = {
   photo: Photo;
@@ -71,8 +78,14 @@ export function EditPhotoDialog({ photo, onUpdated }: EditPhotoDialogProps) {
     const tag = normalizeTag(value);
     if (!tag) return;
 
+    if (tags.length >= PHOTO_TAGS_MAX) {
+      setError(`You can add up to ${PHOTO_TAGS_MAX} tags.`);
+      return;
+    }
+
     setTags((prev) => (prev.includes(tag) ? prev : [...prev, tag]));
     setTagDraft("");
+    setError(null);
   }
 
   function removeTag(tag: string) {
@@ -101,9 +114,19 @@ export function EditPhotoDialog({ photo, onUpdated }: EditPhotoDialogProps) {
       return;
     }
 
+    if (trimmedTitle.length > PHOTO_TITLE_MAX_LENGTH) {
+      setError(`Keep the title under ${PHOTO_TITLE_MAX_LENGTH} characters.`);
+      return;
+    }
+
     // Account for a half-typed tag that `onBlur` hasn't committed yet.
     const pendingTag = normalizeTag(tagDraft);
     const nextTags = pendingTag && !tags.includes(pendingTag) ? [...tags, pendingTag] : tags;
+
+    if (nextTags.length > PHOTO_TAGS_MAX) {
+      setError(`You can add up to ${PHOTO_TAGS_MAX} tags.`);
+      return;
+    }
 
     setError(null);
     setIsSaving(true);
@@ -124,9 +147,8 @@ export function EditPhotoDialog({ photo, onUpdated }: EditPhotoDialogProps) {
         type: "success",
       });
     } catch (updateError) {
-      setError(
-        updateError instanceof Error ? updateError.message : "Could not update this photo.",
-      );
+      logError("update photo", updateError);
+      setError(await toFriendlyMessage(updateError, "Could not update this photo."));
     } finally {
       setIsSaving(false);
     }
@@ -153,6 +175,7 @@ export function EditPhotoDialog({ photo, onUpdated }: EditPhotoDialogProps) {
                 value={title}
                 onChange={(event) => setTitle(event.target.value)}
                 disabled={isSaving}
+                maxLength={PHOTO_TITLE_MAX_LENGTH}
                 aria-invalid={!!error}
                 required
               />
@@ -166,6 +189,7 @@ export function EditPhotoDialog({ photo, onUpdated }: EditPhotoDialogProps) {
                 value={description}
                 onChange={(event) => setDescription(event.target.value)}
                 disabled={isSaving}
+                maxLength={PHOTO_DESCRIPTION_MAX_LENGTH}
                 placeholder="Add a description…"
               />
             </Field>
@@ -209,11 +233,14 @@ export function EditPhotoDialog({ photo, onUpdated }: EditPhotoDialogProps) {
                   onKeyDown={handleTagKeyDown}
                   onBlur={() => addTag(tagDraft)}
                   disabled={isSaving}
+                  maxLength={PHOTO_TAG_MAX_LENGTH}
                   placeholder={tags.length === 0 ? "sunset, ocean" : ""}
                   className="h-5 min-w-24 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
                 />
               </div>
-              <FieldDescription>Press Enter or comma to add a tag.</FieldDescription>
+              <FieldDescription>
+                Press Enter or comma to add a tag. Up to {PHOTO_TAGS_MAX} tags.
+              </FieldDescription>
             </Field>
 
             <FieldError>{error}</FieldError>

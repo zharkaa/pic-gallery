@@ -6,6 +6,7 @@ import { SkeletonImage } from "@/components/skeleton-image";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { fetchPhotos, type Photo } from "@/data/photos";
+import { logError, toFriendlyMessage } from "@/lib/errors";
 
 type GalleryState = "loading" | "ready" | "error";
 
@@ -18,17 +19,23 @@ function App() {
   useEffect(() => {
     let active = true;
 
-    fetchPhotos()
-      .then((rows) => {
+    void (async () => {
+      try {
+        const rows = await fetchPhotos();
         if (!active) return;
         setPhotos(rows);
         setState("ready");
-      })
-      .catch((loadError: unknown) => {
+      } catch (loadError) {
+        logError("load gallery", loadError);
+        const message = await toFriendlyMessage(
+          loadError,
+          "Could not load the gallery. Please try again.",
+        );
         if (!active) return;
-        setError(loadError instanceof Error ? loadError.message : "Could not load the gallery.");
+        setError(message);
         setState("error");
-      });
+      }
+    })();
 
     return () => {
       active = false;

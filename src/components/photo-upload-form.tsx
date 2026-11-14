@@ -18,25 +18,24 @@ import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/components/ui/toast-manager";
+import { uploadPhoto } from "@/data/photos";
+import { logError, toFriendlyMessage } from "@/lib/errors";
 import { prepareUpload } from "@/lib/image-processing";
-import { supabase } from "@/utils/supabase";
+import {
+  PHOTO_DESCRIPTION_MAX_LENGTH,
+  PHOTO_TAG_MAX_LENGTH,
+  PHOTO_TAGS_MAX,
+  PHOTO_TITLE_MAX_LENGTH,
+} from "@/lib/photo-limits";
 
 // Matches the `photos` storage bucket limits in supabase/migrations.
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 const ACCEPTED_TYPES = ["image/jpeg", "image/png", "image/webp", "image/avif", "image/gif"];
 
-// Keep storage keys predictable and avoid trusting the uploaded file name.
-const EXTENSIONS: Record<string, string> = {
-  "image/jpeg": "jpg",
-  "image/png": "png",
-  "image/webp": "webp",
-  "image/avif": "avif",
-  "image/gif": "gif",
-};
-
 type FormErrors = {
   image?: string;
   title?: string;
+  tags?: string;
 };
 
 function validateFile(file: File): string | undefined {
@@ -64,13 +63,11 @@ function todayAsInputValue() {
 
 type PhotoUploadFormProps = {
   className?: string;
-  /** Owner of the new photo; also scopes the storage path under their folder. */
-  userId: string;
   /** Called after a photo is uploaded and its metadata row is saved. */
   onSaved?: () => void;
 };
 
-export function PhotoUploadForm({ className, userId, onSaved }: PhotoUploadFormProps) {
+export function PhotoUploadForm({ className, onSaved }: PhotoUploadFormProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [file, setFile] = useState<File | null>(null);
@@ -125,12 +122,22 @@ export function PhotoUploadForm({ className, userId, onSaved }: PhotoUploadFormP
     const tag = normalizeTag(value);
     if (!tag) return;
 
+    if (tags.length >= PHOTO_TAGS_MAX) {
+      setErrors((prev) => ({
+        ...prev,
+        tags: `You can add up to ${PHOTO_TAGS_MAX} tags.`,
+      }));
+      return;
+    }
+
     setTags((prev) => (prev.includes(tag) ? prev : [...prev, tag]));
     setTagDraft("");
+    setErrors((prev) => ({ ...prev, tags: undefined }));
   }
 
   function removeTag(tag: string) {
     setTags((prev) => prev.filter((existing) => existing !== tag));
+    setErrors((prev) => ({ ...prev, tags: undefined }));
   }
 
   function handleTagKeyDown(event: KeyboardEvent<HTMLInputElement>) {
@@ -172,9 +179,15 @@ export function PhotoUploadForm({ className, userId, onSaved }: PhotoUploadFormP
     const nextErrors: FormErrors = {};
     if (!file) nextErrors.image = "Add a photo before saving.";
     if (!title.trim()) nextErrors.title = "Give your photo a title.";
+    if (title.trim().length > PHOTO_TITLE_MAX_LENGTH) {
+      nextErrors.title = `Keep the title under ${PHOTO_TITLE_MAX_LENGTH} characters.`;
+    }
+    if (nextTags.length > PHOTO_TAGS_MAX) {
+      nextErrors.tags = `You can add up to ${PHOTO_TAGS_MAX} tags.`;
+    }
 
     setErrors(nextErrors);
-    if (nextErrors.image || nextErrors.title) return;
+    if (nextErrors.image || nextErrors.title || nextErrors.tags) return;
 
     const selectedFile = file;
     if (!selectedFile) return;
@@ -183,58 +196,19 @@ export function PhotoUploadForm({ className, userId, onSaved }: PhotoUploadFormP
     setSubmitError(null);
 
     try {
-      // Re-encode large files and create a small grid thumbnail in the browser.
+      // Re-encode in the browser: this strips EXIF/GPS and creates a thumbnail.
       const { original, thumbnail } = await prepareUpload(selectedFile);
 
-      const id = crypto.randomUUID();
-      // Storage RLS only allows the user to write inside their own folder.
-      const storagePath = `${userId}/${id}.${EXTENSIONS[original.type] ?? "jpg"}`;
-      const thumbnailExtension = thumbnail?.type === "image/png" ? "png" : "webp";
-      let thumbnailPath = thumbnail ? `${userId}/thumbs/${id}.${thumbnailExtension}` : null;
-
-      // 1. Upload the image bytes to the private `photos` bucket.
-      const { error: uploadError } = await supabase.storage
-        .from("photos")
-        .upload(storagePath, original, {
-          cacheControl: "3600",
-          contentType: original.type,
-          upsert: false,
-        });
-
-      if (uploadError) throw uploadError;
-
-      if (thumbnail && thumbnailPath) {
-        const { error: thumbnailError } = await supabase.storage
-          .from("photos")
-          .upload(thumbnailPath, thumbnail, {
-            cacheControl: "3600",
-            contentType: thumbnail.type,
-            upsert: false,
-          });
-
-        // A missing thumbnail only costs speed; the original still works.
-        if (thumbnailError) thumbnailPath = null;
-      }
-
-      // 2. Insert the metadata row that points at the uploaded objects.
-      const { error: insertError } = await supabase.from("photos").insert({
+      // The Edge Function authenticates the user, validates the bytes, checks
+      // the quota, and writes the storage objects plus the metadata row.
+      await uploadPhoto(original, thumbnail, {
+        id: crypto.randomUUID(),
         title: title.trim(),
         description: description.trim(),
-        storage_path: storagePath,
-        thumbnail_path: thumbnailPath,
+        dateTaken: dateTaken || null,
         tags: nextTags,
-        date_taken: dateTaken || null,
         published,
-        owner_id: userId,
       });
-
-      if (insertError) {
-        // Don't leave orphaned files behind if the row could not be created.
-        await supabase.storage
-          .from("photos")
-          .remove([storagePath, ...(thumbnailPath ? [thumbnailPath] : [])]);
-        throw insertError;
-      }
 
       const savedTitle = title.trim();
       clearForm();
@@ -245,7 +219,8 @@ export function PhotoUploadForm({ className, userId, onSaved }: PhotoUploadFormP
       });
       onSaved?.();
     } catch (error) {
-      setSubmitError(error instanceof Error ? error.message : "Could not save the photo.");
+      logError("upload photo", error);
+      setSubmitError(await toFriendlyMessage(error, "Could not save the photo. Please try again."));
     } finally {
       setIsSaving(false);
     }
@@ -360,6 +335,7 @@ export function PhotoUploadForm({ className, userId, onSaved }: PhotoUploadFormP
                 value={title}
                 onChange={(event) => setTitle(event.target.value)}
                 placeholder="Sunset over the ocean"
+                maxLength={PHOTO_TITLE_MAX_LENGTH}
                 aria-invalid={!!errors.title}
                 aria-describedby={errors.title ? "title-error" : undefined}
               />
@@ -374,6 +350,7 @@ export function PhotoUploadForm({ className, userId, onSaved }: PhotoUploadFormP
                 value={description}
                 onChange={(event) => setDescription(event.target.value)}
                 placeholder="Where was it taken? What makes it interesting?"
+                maxLength={PHOTO_DESCRIPTION_MAX_LENGTH}
               />
               <FieldDescription>Optional. Shows below the title on the photo page.</FieldDescription>
             </Field>
@@ -407,11 +384,15 @@ export function PhotoUploadForm({ className, userId, onSaved }: PhotoUploadFormP
                   onChange={(event) => setTagDraft(event.target.value)}
                   onKeyDown={handleTagKeyDown}
                   onBlur={() => addTag(tagDraft)}
+                  maxLength={PHOTO_TAG_MAX_LENGTH}
                   placeholder={tags.length === 0 ? "sunset, ocean" : ""}
                   className="h-5 min-w-24 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
                 />
               </div>
-              <FieldDescription>Press Enter or comma to add a tag.</FieldDescription>
+              <FieldDescription>
+                Press Enter or comma to add a tag. Up to {PHOTO_TAGS_MAX} tags.
+              </FieldDescription>
+              <FieldError>{errors.tags}</FieldError>
             </Field>
 
             <div className="grid gap-5 sm:grid-cols-2">
