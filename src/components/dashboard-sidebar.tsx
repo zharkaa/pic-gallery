@@ -14,13 +14,14 @@ type DashboardSidebarProps = {
 export function DashboardSidebar({ view, onViewChange, uploadCount }: DashboardSidebarProps) {
   return (
     <aside className="lg:sticky lg:top-20">
-      <nav aria-label="Dashboard" className="flex flex-col gap-1 rounded-xl border p-2">
+      {/* Horizontal tabs on mobile (above the content), vertical sidebar on desktop. */}
+      <nav aria-label="Dashboard" className="grid grid-cols-2 gap-1 rounded-xl border p-2 lg:flex lg:flex-col">
         <Button
           type="button"
           variant={view === "upload" ? "secondary" : "ghost"}
           aria-current={view === "upload" ? "page" : undefined}
           onClick={() => onViewChange("upload")}
-          className="h-9 justify-start px-2.5"
+          className="h-9 justify-center px-2.5 lg:justify-start"
         >
           <ImagePlus />
           Upload photo
@@ -31,7 +32,7 @@ export function DashboardSidebar({ view, onViewChange, uploadCount }: DashboardS
           variant={view === "uploads" ? "secondary" : "ghost"}
           aria-current={view === "uploads" ? "page" : undefined}
           onClick={() => onViewChange("uploads")}
-          className="h-9 justify-start px-2.5"
+          className="h-9 justify-center px-2.5 lg:justify-start"
         >
           <Images />
           My uploads

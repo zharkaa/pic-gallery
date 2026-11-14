@@ -151,7 +151,7 @@ export default function DashboardPage() {
           uploadCount={uploads?.photos.length}
         />
 
-        <div className="order-first flex min-w-0 flex-col gap-6 lg:order-none">
+        <div className="flex min-w-0 flex-col gap-6">
           {(isOptimizing || photosToOptimize.length > 0) && (
             <div className="flex flex-col gap-3 rounded-xl border bg-muted/30 p-4 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex flex-col gap-1">
