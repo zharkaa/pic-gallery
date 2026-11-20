@@ -8,38 +8,66 @@ type ThemeProviderProps = {
   storageKey?: string;
 };
 
+/** Keep `<meta name="color-scheme">` in sync so native UI matches the theme. */
+function applyColorScheme(scheme: "light" | "dark") {
+  document
+    .querySelector('meta[name="color-scheme"]')
+    ?.setAttribute("content", scheme);
+}
+
+function readStoredTheme(storageKey: string): Theme | null {
+  try {
+    const stored = localStorage.getItem(storageKey);
+    if (stored === "light" || stored === "dark" || stored === "system") return stored;
+  } catch {
+    // Storage can be blocked; fall back to the default theme.
+  }
+
+  return null;
+}
+
 export function ThemeProvider({
   children,
   defaultTheme = "system",
   storageKey = "vite-ui-theme",
   ...props
 }: ThemeProviderProps) {
-  const [theme, setTheme] = useState<Theme>(
-    () => (localStorage.getItem(storageKey) as Theme) || defaultTheme,
-  );
+  const [theme, setTheme] = useState<Theme>(() => readStoredTheme(storageKey) ?? defaultTheme);
 
   useEffect(() => {
     const root = window.document.documentElement;
+    const media = window.matchMedia("(prefers-color-scheme: dark)");
 
-    root.classList.remove("light", "dark");
+    function apply(next: Theme) {
+      const resolved = next === "system" ? (media.matches ? "dark" : "light") : next;
 
-    if (theme === "system") {
-      const systemTheme = window.matchMedia("(prefers-color-scheme: dark)").matches
-        ? "dark"
-        : "light";
-
-      root.classList.add(systemTheme);
-      return;
+      root.classList.remove("light", "dark");
+      root.classList.add(resolved);
+      applyColorScheme(resolved);
     }
 
-    root.classList.add(theme);
+    apply(theme);
+
+    // System is resolved at mount, so follow OS changes while it is selected.
+    if (theme !== "system") return;
+
+    const onChange = () => apply("system");
+    media.addEventListener("change", onChange);
+    return () => media.removeEventListener("change", onChange);
   }, [theme]);
 
   const value = {
     theme,
-    setTheme: (theme: Theme) => {
-      localStorage.setItem(storageKey, theme);
-      setTheme(theme);
+    setTheme: (nextTheme: Theme) => {
+      try {
+        // `system` is the absence of an override, not a stored value.
+        if (nextTheme === "system") localStorage.removeItem(storageKey);
+        else localStorage.setItem(storageKey, nextTheme);
+      } catch {
+        // Storage can be blocked; the theme still applies for this page.
+      }
+
+      setTheme(nextTheme);
     },
   };
 

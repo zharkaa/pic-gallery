@@ -50,6 +50,9 @@
 }
 
 :root {
+  /* MANDATORY: let UA-rendered UI (scrollbars, inputs, canvas) follow the theme. */
+  color-scheme: light dark;
+
   --radius: 0.625rem;
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
@@ -116,6 +119,20 @@
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.556 0 0);
+}
+
+/*
+ * `<meta name="color-scheme">` is only a presentational hint, and the
+ * `color-scheme: light dark` declaration on `:root` above would otherwise win.
+ * Map the meta back to the property so the inline FOUC script and the theme
+ * toggle control native UI (scrollbars, form controls) in both schemes.
+ */
+html:has(> head > meta[name="color-scheme"][content="dark"]) {
+  color-scheme: dark;
+}
+
+html:has(> head > meta[name="color-scheme"][content="light"]) {
+  color-scheme: light;
 }
 
 /*

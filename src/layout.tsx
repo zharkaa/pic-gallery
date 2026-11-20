@@ -11,7 +11,7 @@ export default function Layout() {
   return (
     // changed: flex column + min-h-svh so the page fills the space below the navbar exactly
     <div className="flex min-h-svh flex-col">
-      <ThemeProvider defaultTheme="dark" storageKey="vite-ui-theme">
+      <ThemeProvider defaultTheme="system" storageKey="vite-ui-theme">
         <Navbar />
       </ThemeProvider>
       {/* Renders login/logout notifications; lives here so toasts survive page changes. */}
