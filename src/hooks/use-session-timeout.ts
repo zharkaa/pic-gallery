@@ -16,6 +16,24 @@ const STARTED_AT_KEY = "gallery:session-started-at";
 // Frequent enough to be noticeable, cheap enough to run while idle.
 const CHECK_INTERVAL_MS = 30_000;
 
+/** "3 hours", "10 seconds", … for user-facing copy. */
+function formatAge(ms: number): string {
+  const units: Array<[number, string]> = [
+    [60 * 60 * 1000, "hour"],
+    [60 * 1000, "minute"],
+    [1000, "second"],
+  ];
+
+  for (const [size, name] of units) {
+    if (ms >= size) {
+      const value = Math.round(ms / size);
+      return `${value} ${name}${value === 1 ? "" : "s"}`;
+    }
+  }
+
+  return "0 seconds";
+}
+
 function readStartedAt(): number | null {
   try {
     const raw = window.localStorage.getItem(STARTED_AT_KEY);
@@ -78,7 +96,7 @@ export function useSessionTimeout() {
 
       toast.add({
         title: "Session expired",
-        description: "You have been signed out after 3 hours. Please log in again.",
+        description: `You have been signed out after ${formatAge(MAX_SESSION_AGE_MS)}. Please log in again.`,
         type: "info",
       });
     }
@@ -86,7 +104,7 @@ export function useSessionTimeout() {
     void expireIfNeeded();
 
     // Start the clock on every sign-in and stop it on sign-out or token loss.
-    // Token refreshes do not reset it, so the 3 hours is absolute.
+    // Token refreshes do not reset it, so the cap is absolute.
     const { data } = supabase.auth.onAuthStateChange((event, session) => {
       if (!session) {
         writeStartedAt(null);
