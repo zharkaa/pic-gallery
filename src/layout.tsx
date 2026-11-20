@@ -2,8 +2,12 @@ import { Outlet } from "react-router";
 import Navbar from "./components/Navbar";
 import { ThemeProvider } from "./components/theme-provider";
 import { Toaster } from "./components/ui/toast";
+import { useSessionTimeout } from "./hooks/use-session-timeout";
 
 export default function Layout() {
+  // Signs the user out automatically once a session is 3 hours old.
+  useSessionTimeout();
+
   return (
     // changed: flex column + min-h-svh so the page fills the space below the navbar exactly
     <div className="flex min-h-svh flex-col">
