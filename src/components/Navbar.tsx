@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { LayoutDashboard, LogIn, LogOut, Menu } from "lucide-react";
-import { Link, useNavigate } from "react-router";
+import { Link, useLocation, useNavigate } from "react-router";
 
 import { useSession } from "@/hooks/use-session";
 import { toast } from "@/components/ui/toast-manager";
@@ -18,10 +18,21 @@ import {
   DropdownMenuTrigger,
 } from "./ui/dropdown-menu";
 
+/** Non-color "you are here" cue for menu items. */
+function CurrentPageDot() {
+  return <span aria-hidden="true" className="ml-auto size-1.5 shrink-0 rounded-full bg-current" />;
+}
+
 export default function Navbar() {
   const [scrolled, setScrolled] = useState(false);
   const { user, status } = useSession();
+  const { pathname } = useLocation();
   const navigate = useNavigate();
+
+  // `aria-current` names the current page; the dot is the non-color visual cue.
+  const isHome = pathname === "/";
+  const isLogin = pathname === "/login";
+  const isDashboard = pathname === "/dashboard";
 
   async function handleSignOut() {
     const { error } = await supabase.auth.signOut();
@@ -55,7 +66,13 @@ export default function Navbar() {
         className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6"
       >
         <div className="text-lg font-semibold tracking-tight">
-          <Link to={{ pathname: "/" }}>Gallery</Link>
+          <Link
+            to="/"
+            aria-current={isHome ? "page" : undefined}
+            className="underline-offset-4 aria-[current=page]:underline"
+          >
+            Gallery
+          </Link>
         </div>
 
         <div className="flex items-center gap-2">
@@ -64,7 +81,7 @@ export default function Navbar() {
             <DropdownMenuTrigger
               render={<Button variant="outline" size="icon" aria-label="Open menu" />}
             >
-              <Menu />
+              <Menu aria-hidden="true" />
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-48">
               {user?.email && (
@@ -76,20 +93,26 @@ export default function Navbar() {
                 </>
               )}
               {status === "signed-out" && (
-                <DropdownMenuItem render={<Link to="/login" />}>
-                  <LogIn />
+                <DropdownMenuItem
+                  render={<Link to="/login" aria-current={isLogin ? "page" : undefined} />}
+                >
+                  <LogIn aria-hidden="true" />
                   Login
+                  {isLogin && <CurrentPageDot />}
                 </DropdownMenuItem>
               )}
               {user && (
-                <DropdownMenuItem render={<Link to="/dashboard" />}>
-                  <LayoutDashboard />
+                <DropdownMenuItem
+                  render={<Link to="/dashboard" aria-current={isDashboard ? "page" : undefined} />}
+                >
+                  <LayoutDashboard aria-hidden="true" />
                   Dashboard
+                  {isDashboard && <CurrentPageDot />}
                 </DropdownMenuItem>
               )}
               {user && (
                 <DropdownMenuItem onClick={handleSignOut}>
-                  <LogOut />
+                  <LogOut aria-hidden="true" />
                   Logout
                 </DropdownMenuItem>
               )}
