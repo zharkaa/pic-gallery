@@ -16,6 +16,9 @@ dist-ssr
 !.env.example
 NOTE.md
 
+# Local audit notes (kept out of GitHub)
+AUDIT.md
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
